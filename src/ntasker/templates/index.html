@@ -320,6 +320,21 @@
                                 <i class="ti ti-player-play me-2"></i><span x-text="$i18n('claude_run_fresh')"></span>
                             </button>
                         </template>
+                        {# Flags an open task carries into its next run. #}
+                        <template x-if="task.status !== 'done'">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; toggleFlag(task, 'fasttrack')"
+                                    :title="$i18n('fasttrack_badge')">
+                                <i class="ti me-2" :class="task.fasttrack ? 'ti-bolt-off' : 'ti-bolt'"></i>
+                                <span x-text="$i18n(task.fasttrack ? 'fasttrack_off' : 'fasttrack_on')"></span>
+                            </button>
+                        </template>
+                        <template x-if="task.status !== 'done'">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; toggleFlag(task, 'draft')"
+                                    :title="$i18n('draft_badge')">
+                                <i class="ti me-2" :class="task.draft ? 'ti-player-play' : 'ti-parking'"></i>
+                                <span x-text="$i18n(task.draft ? 'draft_off' : 'draft_on')"></span>
+                            </button>
+                        </template>
                         {# `ti-archive` (not `ti-archive-arrow-down`): the latter is missing #}
                         {# from the vendored tabler-icons webfont (v3.19.0) and renders as #}
                         {# an invisible-but-clickable phantom. #}

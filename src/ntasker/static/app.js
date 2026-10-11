@@ -2380,6 +2380,12 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             await this.refreshAll();
         },
 
+        // Flip a boolean task flag (`draft`, `fasttrack`) from the row's menu.
+        async toggleFlag(task, flag) {
+            await this.patch(task.id, { [flag]: !task[flag] });
+            await this.refreshAll();
+        },
+
         async unarchiveTask(task) {
             await this.patch(task.id, { archived: false });
             await this.refreshAll();
