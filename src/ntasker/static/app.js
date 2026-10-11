@@ -574,6 +574,12 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             this.restoreTagFilter();
             this.restorePhaseFilter();
             this.restorePriorityFilter();
+            // Baseline for the live-update poll BEFORE the first fetch: a
+            // write that lands while the initial load is in flight (the CLI
+            // starting a task the moment the page opens) then differs from
+            // the baseline and the first poll refetches. Taken after the
+            // fetch, it would be swallowed until the next write.
+            await this._pollChanges();
             await Promise.all([
                 this.loadProjects(),
                 this.loadTags(),
@@ -595,7 +601,8 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             await this.loadTasks();
             if (typeof this.pluginInit === 'function') await this.pluginInit();
             // Start the live-update poll last, once the initial state is in
-            // place -- it then refetches whenever a CLI/API change is detected.
+            // place -- it then refetches whenever the token moved since the
+            // baseline taken above.
             this.startChangePolling();
             // Hash routing: the run view lives at #/run/<id> so the browser
             // history / Back button work and a run is shareable / reloadable.
@@ -2751,8 +2758,9 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // within ~5s without a manual reload and without repeatedly pulling
         // the full task list. Own actions still refresh eagerly (see refreshAll).
         startChangePolling() {
-            this._changeToken = null;
-            this._pollChanges();   // establish the baseline immediately
+            // The baseline was seeded in init(), before the initial fetch;
+            // only when that read failed (server not reachable) is it still
+            // null, and the first tick then seeds it.
             this._changeTimer = setInterval(() => {
                 this._pollChanges();
                 // Busy indicators must self-heal. A worker restart (e.g.

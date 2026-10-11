@@ -50,8 +50,11 @@ transitions between the Planned / In Progress / Review / Done columns.
 
 - **Poll cadence** -- 1.5s, set in `startChangePolling()` in `app.js`. `/api/changes` is a single `stat()`, so the
   cost is negligible.
-- **Only refetches on a real change** -- the first poll seeds a baseline; later polls refetch only when the token
-  differs. An idle UI makes one tiny request every 1.5s and nothing else.
+- **Only refetches on a real change** -- `init()` reads the token once *before* the initial data fetch and keeps it
+  as the baseline; later polls refetch only when the token differs. The baseline must come first: a write that lands
+  while the initial fetch is in flight (the CLI starting a task the moment a tab opens) then differs from it and the
+  first poll picks it up. Taken after the fetch, it would be swallowed until the next write. An idle UI makes one
+  tiny request per tick and nothing else.
 - **Own actions stay instant** -- a tab that performs a write still refreshes eagerly (see `refreshAll`); the poll
   is what covers changes the tab did not make.
 - **Mid-drag** -- a change detected while a kanban card is being dragged is deferred until `dragend`, so the
