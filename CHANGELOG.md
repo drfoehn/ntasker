@@ -4,6 +4,17 @@ All notable changes to ntasker.
 
 Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
+## [3.14.0] — 2026-10-11
+Run view: answer the agent's questions directly in the conversation.
+Run view: quick prompt chips below the terminal; task heading and update-report button.
+Run view: reply box grows, accepts pasted/dropped images and voice dictation.
+Worktrees: tracked worktrees with an end decision.
+Queue planner: plan the picked tasks and record their dependencies.
+Queue: project-less tasks run in parallel; *Start now* for waiting entries.
+Task menu: one agent button, edit and a menu per task, fasttrack and draft toggles.
+Workspace: documents grouped by project, sortable.
+Fix: long input is written to the PTY in full; live updates seed the change token before the first fetch.
+
 ## [3.13.0] — 2026-10-09
 Runs: conversation view -- a run tab shows prompt/answer turns from the transcript, with reply box, steps and tokens.
 Runs: the report sits in a pane beside the conversation, reloads live and says when the conversation went on after it.
