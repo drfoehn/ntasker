@@ -1339,7 +1339,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     project's lane and the worker spawns its agent as soon as that lane is
     free. Server-only -- the worker lives in the running server, so without one
     nothing would ever start. Prints the run view's URL, which ``--open``
-    opens.
+    opens. ``--now`` adds the panel's start-now button: the task starts even
+    while its lane or a directory it needs is taken.
     """
     rc = _reject_unqueueable(args.task_id)
     if rc is not None:
@@ -1355,6 +1356,25 @@ def cmd_run(args: argparse.Namespace) -> int:
         if status >= 400:
             print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
             return 1
+        paused = not data.get("enabled")
+        if args.now and not paused:   # do not wait for the lane -- the panel's start-now button
+            try:
+                status, data = _api_call(base, "POST", "/api/queue/start-now", {"id": tid})
+            except OSError as exc:
+                print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+                return 1
+            if status >= 400:
+                print(
+                    _("ntasker: #{id} -- {detail}").format(id=tid, detail=data.get("detail", status)),
+                    file=sys.stderr,
+                )
+                return 1
+            print(
+                _("#{id} starts now, next to what is already running; watch it at {url}").format(
+                    id=tid, url=f"{base}/#/run/{tid}"
+                )
+            )
+            continue
         print(
             _("#{id} queued -- {pos}. in its lane; watch it at {url}").format(
                 id=tid,
@@ -1362,7 +1382,6 @@ def cmd_run(args: argparse.Namespace) -> int:
                 url=f"{base}/#/run/{tid}",
             )
         )
-        paused = not data.get("enabled")
     if paused:   # nothing starts at all until the queue is running again
         print(
             _("ntasker: note -- the queue is paused; `ntasker queue start` runs it"),
@@ -2674,6 +2693,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp_run.add_argument("task_id", type=_task_id, nargs="+")
     sp_run.add_argument(
         "--open", action="store_true", help=_("Open the run view in a browser")
+    )
+    sp_run.add_argument(
+        "--now",
+        action="store_true",
+        help=_("Start at once, even while another run holds the project or a directory"),
     )
     # Server to talk to; default NTASKER_URL (set inside spawned sessions).
     sp_run.add_argument("--host", default=None)

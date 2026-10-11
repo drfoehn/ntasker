@@ -27,6 +27,16 @@ queued, flagged **ended**, blocking its lane until you have looked at it.
 while it runs it neither occupies the lane nor holds its directories for the queue. Everything else (ended, resume,
 done) applies as usual. Switch it off and a Quicktask queues like any other run.
 
+**Tasks without a project** have no lane. They share no working directory with anything, so any number of them run
+side by side -- each starts on the next tick. Only an explicit directory lock (`--locks`) can still make one wait.
+
+**Start now** is your override for a single waiting entry: the `⏭` button on the entry (or `ntasker run <id> --now`)
+starts it on the next tick although its project already has a run, a directory it needs is held, or one is git-dirty.
+From then on it is an ordinary run that occupies the lane and its directories like any other -- so two agents work in
+one directory, which is exactly what the lanes prevent; that is your call. The button shows only where it changes
+something: not on an `ended` entry (run it again or resume it), not while a dependency is open or the agent is
+missing, and not while the queue is paused.
+
 ## Drafts
 
 A task flagged **Draft** (checkbox in the new-task form and the edit dialog, `--draft` on the CLI, `draft` in the
@@ -39,7 +49,8 @@ Draft to release the task.
 ## The panel
 
 **One column per project.** The worker runs one task per project at a time, so a column is literally one execution lane:
-its own rail, its own `1..n` numbering, its own next-up. Cross-project tasks get the first column. Many projects scroll
+its own rail, its own `1..n` numbering, its own next-up. Cross-project tasks get the first column -- the one column
+that is no lane: its entries run in parallel. Many projects scroll
 sideways rather than squeezing every lane flat.
 
 | Element | Meaning |
@@ -48,6 +59,7 @@ sideways rather than squeezing every lane flat.
 | Position bead (`1`, `2`, `3`) | Run order **within that project**. Indigo = running, orange = waiting for input. |
 | Lock badge on an entry | The queue is passing this one over -- see [Skipped entries](#skipped-entries). The tooltip names the blockers, including the project of any blocker from another column. |
 | **Running** / **Waiting for your input** | Links into that session's terminal. |
+| `⏭` on a waiting entry | Start now -- do not wait for the project or a held directory to be free. |
 | `✕` | Removes the entry. |
 
 Queued tasks also carry an indigo `⧉ n` badge on their board row / kanban card -- the same within-project position, so
@@ -256,7 +268,8 @@ ntasker patch <id> --fasttrack|--no-fasttrack --fail-continue|--no-fail-continue
 server (`POST /api/queue/run`), so it does exactly what the board does: append the task to its project's lane, move it
 to `wip`, clear an `ended` flag. It answers with the position in that lane -- `1.` starts now, higher waits -- and the
 run view's URL (`http://<host>:<port>/#/run/<id>`), which `--open` opens in a browser. A paused queue is pointed out,
-because then nothing starts at all. Several ids in one call are queued in the order given.
+because then nothing starts at all. Several ids in one call are queued in the order given. With `--now` the task
+does not wait for its lane (`POST /api/queue/start-now`) -- the panel's start-now button.
 
 `ntasker queue add <id...>` is the *worklist* edit next to it -- the CLI twin of dragging cards onto the panel. It
 writes the DB directly (no server needed), appends or, with `--top`, jumps the line; it does not move a task to `wip`
@@ -276,6 +289,7 @@ id deserves to be told.
 | `GET /api/queue` | `{enabled, items: [task, ...], skipped: {id: {reason, project, holder}}}` -- full task rows in run order (a queued task may be filtered off the board and the panel still has to render it); `skipped` holds the reasons `lock` / `dirty` / `ended`. |
 | `PUT /api/queue` | Body `{ids: [...]}` replaces the whole queue, head first. Ids that are closed, archived or gone are dropped. An empty list clears the queue. Never restarts an `ended` entry. |
 | `POST /api/queue/run` | Body `{id}` -- the run button: appends the task to the queue (an already-queued id keeps its place), moves it to `phase=wip` right away and clears its `ended` flag. Returns the queue. |
+| `POST /api/queue/start-now` | Body `{id}` -- the start-now button on a waiting entry: the worker starts it next tick although its lane is busy, a directory is held or git-dirty. 409 when the task is not a waiting queue entry (live, `ended`, not queued), the queue is paused, a dependency is open or its agent is missing. Returns the queue. |
 | `POST /api/queue/resume` | Body `{id}` -- the resume button on an `ended` entry: the worker reopens the task's stored session next tick, in place; the flag clears once it is live. 409 when the task is not queued or has nothing to resume. Returns the queue. |
 | `POST /api/queue/plan` | Starts the queue planner (see **Planning the queue**) and returns `{id}` -- the reserved task id its session runs under. 409 while a planner is already running or when the default agent's CLI is missing. |
 | `POST /api/projects/quick-run` | Body `{project, prompt?}` -- a Quicktask: creates a `wip` task (placeholder title and blank-prompt run without `prompt`, otherwise the prompt is the task), appends it to the queue. Returns the task. |

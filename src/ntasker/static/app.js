@@ -3693,6 +3693,41 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             if (this.claudeOpenTerminal) this._openWhenLive(id);
         },
 
+        // Whether a queue entry gets the start-now button: it waits although it
+        // could run -- its project has a live or ended run, or a directory it
+        // needs is held / dirty. Not for an ended entry (run again / resume),
+        // an open dependency or a missing agent, and not while paused.
+        canStartNow(item) {
+            if (!this.queueEnabled || this.taskRunPhase(item.id) !== null) return false;
+            const ended = t => (this.queueSkipped[t.id] || {}).reason === 'ended';
+            if (ended(item) || this.isBlocked(item) || !this.taskRunnable(item)) return false;
+            if (this.queueSkipped[item.id]) return true;   // lock / dirty
+            if (!item.project) return false;               // no project, no lane
+            return this._projectHasOtherSession(item.project, item.id)
+                || this.queue.some(t => t.id !== item.id && t.project === item.project && ended(t));
+        },
+
+        // The start-now button on a waiting queue entry: the worker starts it
+        // on its next tick, next to whatever occupies its lane or directories.
+        async startNow(item) {
+            const id = item.id;
+            try {
+                const r = await fetch('/api/queue/start-now', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id }),
+                });
+                if (!r.ok) throw new Error('start failed');
+                this._queueRaw = null;   // force the next poll to re-read
+                this._applyQueue(await r.json());
+            } catch (_e) {
+                this.showToast(_i('update_failed'), 'danger');
+                return;
+            }
+            this.showToast(_i('queue_start_now_started', { id }), 'success');
+            if (this.claudeOpenTerminal) this._openWhenLive(id);
+        },
+
         // Poll the session list until ``id`` has a live session, then open its
         // tab. Gives up after ``timeout`` ms and stays on the board -- the
         // queue panel then shows why the task has not started (lane busy,

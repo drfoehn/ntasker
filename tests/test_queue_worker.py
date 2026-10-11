@@ -43,6 +43,7 @@ def env(tmp_path, monkeypatch):
     taskqueue.QUICK.clear()
     taskqueue.RESUME.clear()
     taskqueue.LANELESS.clear()
+    taskqueue.FORCE.clear()
     taskqueue._booted = True
 
     def add(title, project, locks_=()):
@@ -231,3 +232,66 @@ def test_adopt_running_skips_drafts(env):
         conn.execute("UPDATE tasks SET draft = 1 WHERE id = ?", (d,))
     taskqueue.adopt_running(d)
     assert _queue_ids() == []
+
+
+def test_tasks_without_project_run_in_parallel(env):
+    """No project, no lane: they start side by side, and an ended one blocks
+    none of the others. An explicit directory lock still makes one wait."""
+    a = env["add"]("A", None)
+    b = env["add"]("B", None)
+    held = env["add"]("H", None, ["y"])
+    waits = env["add"]("W", None, ["y"])
+    taskqueue.set_queue([a, b, held, waits])
+    taskqueue.tick()
+    assert env["started"] == [a, b, held]
+    assert taskqueue.skipped(taskqueue.load_queue(), env["live"])[waits]["holder"] == held
+    env["live"].discard(a)
+    taskqueue.tick()   # A is flagged ended ...
+    c = env["add"]("C", None)
+    taskqueue.set_queue([a, b, held, waits, c])
+    taskqueue.tick()   # ... and C starts regardless
+    assert env["started"] == [a, b, held, c]
+
+
+def test_start_now_overrides_lane_and_locks_once(env):
+    running = env["add"]("R", "x", ["y"])
+    same_lane = env["add"]("S", "x")
+    locked = env["add"]("L", "y")
+    nxt = env["add"]("N", "x")
+    taskqueue.set_queue([running, same_lane, locked, nxt])
+    taskqueue.tick()
+    assert env["started"] == [running]
+    assert taskqueue.request_start_now(same_lane)
+    assert taskqueue.request_start_now(locked)
+    taskqueue.tick()
+    assert env["started"] == [running, same_lane, locked]
+    assert taskqueue.FORCE == set()
+    # From here on it is an ordinary run: it keeps the lane busy for N.
+    env["live"].discard(running)
+    taskqueue.set_queue([same_lane, locked, nxt])
+    taskqueue.tick()
+    assert env["started"] == [running, same_lane, locked]
+
+
+def test_start_now_refused_when_it_cannot_apply(env):
+    running = env["add"]("R", "x")
+    blocked = env["add"]("B", "x")
+    unqueued = env["add"]("U", "x")
+    dep = env["add"]("D", "z")
+    with get_conn() as conn:
+        conn.execute("INSERT INTO task_deps (task_id, depends_on_id) VALUES (?, ?)", (blocked, dep))
+    taskqueue.set_queue([running, blocked])
+    taskqueue.tick()
+    assert not taskqueue.request_start_now(running)    # already live
+    assert not taskqueue.request_start_now(blocked)    # open dependency
+    assert not taskqueue.request_start_now(unqueued)   # not queued
+    client = TestClient(app, base_url="http://127.0.0.1:8766")
+    assert client.post("/api/queue/start-now", json={"id": blocked}).status_code == 409
+    waiting = env["add"]("W", "x")
+    taskqueue.set_queue([running, blocked, waiting])
+    set_setting("queue_enabled", "false")
+    assert not taskqueue.request_start_now(waiting)    # paused
+    set_setting("queue_enabled", "true")
+    assert client.post("/api/queue/start-now", json={"id": waiting}).status_code == 200
+    taskqueue.tick()
+    assert env["started"] == [running, waiting]
