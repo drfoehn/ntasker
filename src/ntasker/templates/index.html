@@ -1217,7 +1217,8 @@
 
                     {# One column per project -- the worker runs one task per #}
                     {# project at a time, so a column is literally one execution #}
-                    {# lane. Cross-project first, then alphabetical. #}
+                    {# lane. Cross-project first, then alphabetical; that column #}
+                    {# is no lane -- tasks without a project run side by side. #}
                     <div class="task-queue-board" x-show="queue.length > 0" x-cloak>
                     <template x-for="group in queueGroups" :key="group.key">
                     <div class="task-queue-col">
@@ -1289,6 +1290,13 @@
                                                 :aria-label="$i18n('claude_resume')" :title="$i18n('claude_resume')">
                                             <img :src="agentIconUrl(item)" class="claude-logo-icon" alt="">
                                             <i class="ti ti-rotate-clockwise-2 claude-resume-glyph"></i>
+                                        </button>
+                                    </template>
+                                    {# Waiting entry: start it anyway, next to whatever holds its lane or directories. #}
+                                    <template x-if="canStartNow(item)">
+                                        <button type="button" class="btn btn-sm btn-ghost-secondary task-queue-state-btn" @click.stop="startNow(item)"
+                                                :aria-label="$i18n('queue_start_now')" :title="$i18n('queue_start_now')">
+                                            <i class="ti ti-player-track-next fs-3"></i>
                                         </button>
                                     </template>
                                     <template x-if="taskRunPhase(item.id) === 'running'">

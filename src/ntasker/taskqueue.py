@@ -61,6 +61,15 @@ starts on the next tick regardless of what runs in its project, and its own
 session neither occupies the lane nor holds its directories for the queue
 (:data:`LANELESS`). Everything else -- retire, ended, resume -- applies as
 usual.
+
+A task **without a project** has no lane at all: it shares no working
+directory with anything, so any number of them run side by side. Only its
+explicit directory locks (``tasks.locks``) can still make it wait.
+
+**Start now** (:func:`request_start_now`, :data:`FORCE`) is the user's override
+for a single waiting entry: it starts on the next tick although its lane is
+busy, a directory it needs is held, or one is git-dirty. From then on it is an
+ordinary run -- it occupies the lane and its directories like any other.
 """
 
 from __future__ import annotations
@@ -114,6 +123,11 @@ LANELESS: set[int] = set()
 # Consumed by :func:`tick` on start, which also clears the entry's ended flag.
 RESUME: set[int] = set()
 
+# Task ids the user told to start *now* -- lane, directory locks and the git
+# check are skipped for exactly one tick, after which the set is emptied: an
+# override that could not be honoured must not fire on its own later.
+FORCE: set[int] = set()
+
 # Whether :func:`tick` has run once since the process started -- gates the
 # resume-after-restart sweep.
 _booted = False
@@ -123,8 +137,8 @@ ENDED_SUMMARY = "session ended without finish"
 
 
 def _bucket(project: str | None) -> str:
-    """Concurrency bucket for a task: its project, or one shared cross-project
-    bucket for tasks without one."""
+    """Concurrency bucket for a task: its project. ``""`` for a task without
+    one -- which is no lane: such tasks never wait for each other."""
     return project or ""
 
 
@@ -250,6 +264,35 @@ def request_resume(task_id: int) -> bool:
     return True
 
 
+def request_start_now(task_id: int) -> bool:
+    """The start-now button on a waiting entry: start it on the next tick,
+    whatever occupies its lane or directories (see :data:`FORCE`).
+
+    Only for a queued entry that waits: no live session, not flagged ended
+    (that one is run again or resumed), queue switched on. Open dependencies
+    and a missing agent CLI are not overridden -- the entry could not run.
+    Returns ``False`` when any of that keeps the task from starting.
+    """
+    from ntasker.settings import get_queue_enabled  # noqa: PLC0415 -- lazy: avoid cycle
+
+    if not get_queue_enabled():
+        return False
+    if task_id in set(active_session_ids()) | set(external_session_ids()):
+        return False
+    runnable = _runnable_agents()
+    default_agent = resolve_agent_key(None)
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM tasks WHERE id = ? AND queue_order IS NOT NULL", (task_id,)
+        ).fetchone()
+        if row is None or row["session_ended_at"]:
+            return False
+        if not _startable(row, conn, runnable, default_agent):
+            return False
+    FORCE.add(task_id)
+    return True
+
+
 def flag_running_ended() -> None:
     """Shutdown: flag every queued run that is live right now as ended.
 
@@ -292,7 +335,8 @@ def _busy_buckets(live: set[int], conn: sqlite3.Connection) -> set[str]:
     agents in one working directory is exactly what the one-per-project rule
     exists to prevent -- so ``live`` includes the external sessions (``/task``
     in a terminal). A done task's session is being killed (see
-    :func:`_kill_done`) and does not count in the meantime.
+    :func:`_kill_done`) and does not count in the meantime. Tasks without a
+    project occupy nothing -- they have no lane.
     """
     if not live:
         return set()
@@ -301,7 +345,7 @@ def _busy_buckets(live: set[int], conn: sqlite3.Connection) -> set[str]:
         f"SELECT project FROM tasks WHERE id IN ({placeholders}) AND status != 'done'",
         list(live),
     ).fetchall()
-    return {_bucket(r["project"]) for r in rows}
+    return {r["project"] for r in rows if r["project"]}
 
 
 def _runnable_agents() -> set[str]:
@@ -438,6 +482,7 @@ def tick() -> None:
         _running.update(queued_ids & (live | external))
     _running.intersection_update(queued_ids)
     LANELESS.intersection_update(queued_ids)
+    FORCE.intersection_update(queued_ids)
 
     # Finished: ``status=done`` (the user closed it, or the agent did because
     # the task told it to) or archived. The entry leaves the queue; a done
@@ -496,6 +541,8 @@ def tick() -> None:
         RESUME.update(int(r["id"]) for r in rows if r["session_ended_at"] and resumable(r))
     RESUME.intersection_update(int(r["id"]) for r in rows)
 
+    forced = set(FORCE)
+    FORCE.clear()
     if not rows or not enabled:
         return
 
@@ -514,32 +561,40 @@ def tick() -> None:
     with get_conn() as conn:
         busy = _busy_buckets(occupied, conn)
         busy |= {
-            _bucket(r["project"])
+            r["project"]
             for r in rows
-            if r["session_ended_at"] and int(r["id"]) not in RESUME and int(r["id"]) not in LANELESS
+            if r["project"]
+            and r["session_ended_at"]
+            and int(r["id"]) not in RESUME
+            and int(r["id"]) not in LANELESS
         }
         held = locks.held_dirs(conn, occupied) if dir_locks else {}
         for row in rows:
             task_id = int(row["id"])
             # A live entry runs, an ended one waits for the user (or its
             # resume) -- for a laned task its busy bucket already says so, a
-            # laneless one needs the explicit guard.
+            # laneless or project-less one needs the explicit guard.
             if task_id in live | external or (row["session_ended_at"] and task_id not in RESUME):
                 continue
             laneless = task_id in LANELESS
+            # Start now: the user overrides lane, locks and the git check for
+            # this one start; the run then occupies them like any other.
+            force = task_id in forced
             bucket = _bucket(row["project"])
-            if (bucket in busy and not laneless) or not _startable(row, conn, runnable, default_agent):
+            if (bucket in busy and not (laneless or force)) or not _startable(
+                row, conn, runnable, default_agent
+            ):
                 continue
             if dir_locks and not laneless:
                 # A resume skips the git check: the dirt is that run's own
                 # unfinished work, which is exactly what it continues.
                 resume = task_id in RESUME
-                if _lock_reason(row, held, require_clean and not resume) is not None:
+                if not force and _lock_reason(row, held, require_clean and not resume) is not None:
                     continue
                 for d in locks.task_dirs(row["project"], locks.parse(row["locks"])):
                     held.setdefault(d, task_id)
             starts.append(task_id)
-            if not laneless:
+            if bucket and not laneless:
                 busy.add(bucket)
 
     # Spawning happens after the DB context is closed: it forks a process and

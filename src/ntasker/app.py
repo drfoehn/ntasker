@@ -543,6 +543,8 @@ def build_js_strings() -> dict[str, str]:
         ),
         "queue_plan_started": _("Queue planner started -- watch it in its session."),
         "queue_run_next": _("Run"),
+        "queue_start_now": _("Start now -- do not wait for the project to be free"),
+        "queue_start_now_started": _("Task #{id} starts now, next to what is already running."),
         "queued_front": _("Task #{id} queued -- it starts as soon as its project is free."),
         "queue_paused_hint": _("Paused -- press Resume to work through these."),
         "queue_running_hint": _("Running one task per project, top down."),
@@ -2008,6 +2010,21 @@ def api_queue_resume(payload: RunIn) -> JSONResponse:
     """
     if not taskqueue.request_resume(payload.id):
         raise HTTPException(status_code=409, detail=_("Nothing to resume"))
+    return JSONResponse(_queue_payload(taskqueue.load_queue()))
+
+
+@app.post("/api/queue/start-now")
+def api_queue_start_now(payload: RunIn) -> JSONResponse:
+    """The start-now button on a waiting entry: do not wait for the lane.
+
+    The worker starts the task on its next tick although its project has a
+    live session, a directory it needs is held, or one is git-dirty (see
+    :func:`ntasker.taskqueue.request_start_now`). 409 when the task is not a
+    waiting queue entry, the queue is paused, a dependency is still open or its
+    agent is not installed.
+    """
+    if not taskqueue.request_start_now(payload.id):
+        raise HTTPException(status_code=409, detail=_("This task cannot be started right now"))
     return JSONResponse(_queue_payload(taskqueue.load_queue()))
 
 
