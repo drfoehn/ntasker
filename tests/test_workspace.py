@@ -129,3 +129,14 @@ def test_page_and_enablement(client, monkeypatch):
     assert 'href="/workspace"' not in client.get("/").text
     # task_context keeps working without the workspace plugin
     assert client.get("/api/fs/pick").status_code == 200
+
+
+def test_scan_docs_reads_project_from_filename(tmp_path):
+    for name in ("ntasker_Report_2026-10-11.md", "2026-06-08_notes.md", "loose.md"):
+        (tmp_path / name).write_text("x")
+    docs = {d["name"]: d["project"] for d in scan.scan_docs(str(tmp_path))["docs"]}
+    assert docs == {
+        "ntasker_Report_2026-10-11.md": "ntasker",
+        "2026-06-08_notes.md": "",
+        "loose.md": "",
+    }

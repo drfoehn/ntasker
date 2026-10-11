@@ -286,19 +286,37 @@
                                 <div class="card-header">
                                     <div class="row g-2 w-100 align-items-center">
                                         <div class="col">
-                                            <input type="search" class="form-control form-control-sm"
-                                                   :placeholder="$i18n('ws_search')" x-model="q.docs">
+                                            <div class="input-icon">
+                                                <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+                                                <input type="search" class="form-control"
+                                                       :placeholder="$i18n('ws_search')" x-model="q.docs">
+                                            </div>
                                         </div>
                                         <div class="col-auto">
-                                            <select class="form-select form-select-sm" x-model="kindFilter">
-                                                <option value="" x-text="$i18n('ws_all_kinds')"></option>
-                                                <template x-for="(n, k) in data.docs.kinds" :key="k">
-                                                    <option :value="k" x-text="`${k} (${n})`"></option>
-                                                </template>
-                                            </select>
+                                            <div class="input-group flex-nowrap">
+                                                <span class="input-group-text"><i class="ti ti-filter"></i></span>
+                                                <select class="form-select" x-model="kindFilter">
+                                                    <option value="" x-text="$i18n('ws_all_kinds')"></option>
+                                                    <template x-for="(n, k) in data.docs.kinds" :key="k">
+                                                        <option :value="k" x-text="`${k} (${n})`"></option>
+                                                    </template>
+                                                </select>
+                                            </div>
                                         </div>
                                         <div class="col-auto">
-                                            <button class="btn btn-sm btn-primary"
+                                            <div class="input-group flex-nowrap" :title="$i18n('ws_sort_by')">
+                                                <span class="input-group-text"><i class="ti ti-arrows-sort"></i></span>
+                                                <select class="form-select" :value="docSort"
+                                                        @change="setDocSort($event.target.value)"
+                                                        :aria-label="$i18n('ws_sort_by')">
+                                                    <option value="latest" x-text="$i18n('ws_sort_latest')"></option>
+                                                    <option value="name" x-text="$i18n('ws_sort_name')"></option>
+                                                    <option value="count" x-text="$i18n('ws_sort_count')"></option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-auto">
+                                            <button class="btn btn-icon btn-primary"
                                                     @click="startCreate(data.docs.path)"
                                                     :title="$i18n('ws_new_note')">
                                                 <i class="ti ti-plus"></i>
@@ -317,11 +335,26 @@
                                             <th class="w-1"></th>
                                         </tr>
                                         </thead>
+                                        <template x-for="g in docGroups()" :key="g.key">
                                         <tbody>
-                                        <template x-for="d in visibleDocs()" :key="d.path">
+                                        <tr class="cursor-pointer bg-body-tertiary" role="button"
+                                            :aria-expanded="docGroupOpen(g.key)"
+                                            @click="docOpen[g.key] = !docOpen[g.key]">
+                                            <td class="text-secondary">
+                                                <i class="ti fs-2"
+                                                   :class="docGroupOpen(g.key) ? 'ti-chevron-down' : 'ti-chevron-right'"></i>
+                                            </td>
+                                            <td>
+                                                <span class="fw-bold" x-text="g.name || $i18n('ws_no_project')"></span>
+                                                <span class="badge bg-secondary-lt ms-1" x-text="g.docs.length"></span>
+                                            </td>
+                                            <td class="text-secondary text-nowrap" x-text="fmtDate(g.latest)"></td>
+                                            <td colspan="2"></td>
+                                        </tr>
+                                        <template x-for="d in (docGroupOpen(g.key) ? g.docs : [])" :key="d.path">
                                             <tr :class="d.previewable ? 'cursor-pointer' : ''"
                                                 @click="d.previewable && preview(d.path)">
-                                                <td class="text-secondary">
+                                                <td class="text-secondary ps-4">
                                                     <i class="ti fs-2" :class="iconFor(d.kind)"></i>
                                                 </td>
                                                 <td>
@@ -339,6 +372,7 @@
                                             </tr>
                                         </template>
                                         </tbody>
+                                        </template>
                                     </table>
                                 </div>
                                 <div class="card-body text-secondary text-center" x-show="!visibleDocs().length"
