@@ -2039,22 +2039,6 @@
                             </button>
                         </template>
                         <span class="ms-auto d-flex align-items-center gap-2 flex-wrap">
-                            {# Quick prompts live above the reply box (see _conversation.html); #}
-                            {# without a conversation pane they fold into one menu here. #}
-                            <template x-if="quickPrompts.length && !runChatShown">
-                                <span class="dropdown" x-data="actionMenu()" @click.outside="open = false">
-                                    <button type="button" class="btn btn-ghost-secondary" @click="toggle($event)"
-                                            :disabled="activeTab?.status === 'exited'" :aria-expanded="open ? 'true' : 'false'">
-                                        <i class="ti ti-message-forward me-1 fs-3"></i><span x-text="$i18n('quick_prompts')"></span>
-                                    </button>
-                                    <div class="dropdown-menu" :class="{ show: open }" :style="style" x-cloak>
-                                        <template x-for="p in quickPrompts" :key="p.label">
-                                            <button type="button" class="dropdown-item" :title="p.prompt"
-                                                    @click="open = false; sendQuickPrompt(p.prompt)" x-text="p.label"></button>
-                                        </template>
-                                    </div>
-                                </span>
-                            </template>
                             {# Solid once the agent handed the task over for review. #}
                             <button type="button" class="btn" @click="markDoneFromClaudeRun()"
                                     :class="runTask && runTask.phase === 'review' ? 'btn-success' : 'btn-outline-success'">
@@ -2125,6 +2109,11 @@
                             </div>
                         </template>
                     </div>
+                    {# Terminal-only view: the quick prompts below the terminal, where the #}
+                    {# conversation pane has them above its reply box (see _quick_prompts.html). #}
+                    <template x-if="activeTab && activeTab?.status !== 'exited' && !runChatShown && !runDiffOpen">
+                        {% include '_quick_prompts.html' %}
+                    </template>
                 </div>
             </div>
         </div>

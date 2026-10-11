@@ -1,0 +1,11 @@
+{# Quick prompts (the `quick_prompts` setting): one chip per prompt, each goes #}
+{# straight to the agent's input line. Shown above the conversation's reply box #}
+{# and, without a conversation pane, below the terminal. #}
+<div class="d-flex flex-wrap gap-1 mb-2" x-show="quickPrompts.length">
+    <template x-for="p in quickPrompts" :key="p.label">
+        <button type="button" class="btn btn-sm btn-ghost-secondary" :title="p.prompt"
+                :disabled="activeTab?.status === 'exited'" @click="sendQuickPrompt(p.prompt)">
+            <i class="ti ti-message-forward me-1"></i><span x-text="p.label"></span>
+        </button>
+    </template>
+</div>

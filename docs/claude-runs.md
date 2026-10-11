@@ -298,8 +298,8 @@ opens the terminal.
 ## Quick prompts
 
 Chips above the reply box type a canned prompt into the live session and send it -- the same as if you had entered
-it in the terminal. Without a conversation pane (terminal-only view) they fold into one *Quick prompts* menu in the
-toolbar. Configure them under *Settings -> Agents & runs -> Quick prompts* (one
+it in the terminal. Without a conversation pane (terminal-only view) the same chips sit below the terminal.
+Configure them under *Settings -> Agents & runs -> Quick prompts* (one
 label + prompt per row), or set the `quick_prompts` key directly:
 
 ```
