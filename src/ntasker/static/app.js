@@ -247,6 +247,22 @@ function _b64ToBytes(b64) {
     return bytes;
 }
 
+// Overflow ("...") menu of a task row / board card. The menu is positioned
+// fixed from the button's rect: the board columns and the task list are
+// scroll containers, which would clip an absolutely positioned dropdown.
+function actionMenu() {
+    return {
+        open: false,
+        style: '',
+        toggle(ev) {
+            if (this.open) { this.open = false; return; }
+            const r = ev.currentTarget.getBoundingClientRect();
+            this.style = `position: fixed; top: ${r.bottom + 2}px; right: ${window.innerWidth - r.right}px; left: auto;`;
+            this.open = true;
+        },
+    };
+}
+
 function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'claude') {
     // Resolve initial viewMode: localStorage > server-supplied default > 'list'.
     // The server value comes from the `default_view` setting and is injected

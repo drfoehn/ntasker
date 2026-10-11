@@ -124,7 +124,7 @@ its own indicator.
 ntasker ends a session on its own in exactly one case: the task being set to `done`. Everything else -- the agent's
 review hand-off, moving a task around the board, deleting it -- leaves the session alone; it ends when its process
 exits or you press **Pause**. Before it hands off, the agent writes its **final report**
-(`ntasker report <id>`) -- read it via the report icon on the card, no need to reopen the session. See
+(`ntasker report <id>`) -- read it via *Show report* in the card's menu, no need to reopen the session. See
 [task-queue.md](task-queue.md).
 
 A page reload drops the *client* terminal but not the *server* session -- reopening reattaches. Stopping the session,
@@ -146,9 +146,9 @@ project directory -- the whole conversation replays and you can keep working whe
 The button appears only when the task ran at least once (a captured session id), its agent is Claude, and the `claude`
 CLI is launchable. OpenCode and Pi have their own session mechanics and do not expose a resume button yet.
 
-An **open** task with a stored session gets the same button too -- on its board row and kanban card, *next to* the run
-button rather than in place of it, because both make sense there: the run button starts the task over with a fresh
-seed, the resume button continues the conversation it already had. This is the common case after a review hand-off,
+An **open** task with a stored session gets the same button too -- on its board row and kanban card, in place of the
+run button: continuing the conversation it already had is the usual next step, while *Start over with a fresh prompt*
+(the run button's job) moves into the row's "..." menu. This is the common case after a review hand-off,
 where the task sits in `review` with its work described in a session nobody can reach any more. It shows while the
 task has no live session to switch to, and never on a draft.
 
@@ -227,7 +227,7 @@ look up. With `--title`, the project is derived from the working directory (the 
 path relative to `projects_base` / home) unless `--project` says otherwise. While the session keeps running the task
 shows as busy, exactly like a `/task` one.
 
-**From the board** -- the *Pick up a session* button in the page header. It opens on the conversations running
+**From the board** -- the terminal button in the queue header (*Pick up a session*). It opens on the conversations running
 elsewhere *right now*, across all projects, newest first: each row names its project, the first thing you asked and
 when it last ran. One click ends that session, files it under a new task (titled after that first prompt, in the
 session's own project) and opens it right here. Sessions that already belong to a task are left out -- they are on the
@@ -286,8 +286,8 @@ Parsing (`src/ntasker/transcript.py`) happens on the server per poll (`GET /api/
 2.5 s while the pane is on screen); an unchanged file is answered from a small in-process cache keyed on its mtime
 and size.
 
-The report gets its own pane beside the conversation, with a header carrying **Mark done**, a close button and the
-time the report was written. It opens by itself when the report is written or rewritten while the tab is open;
+The report gets its own pane beside the conversation, with a header carrying a close button and the time the report
+was written. It opens by itself when the report is written or rewritten while the tab is open;
 closing it sticks until the report changes. A stale hint appears when you sent a further prompt after the report was
 written.
 
@@ -297,8 +297,9 @@ opens the terminal.
 
 ## Quick prompts
 
-The run view's toolbar can carry buttons that type a canned prompt into the live session and send it -- the same
-as if you had entered it in the terminal. Configure them under *Settings -> Agents & runs -> Quick prompts* (one
+Chips above the reply box type a canned prompt into the live session and send it -- the same as if you had entered
+it in the terminal. Without a conversation pane (terminal-only view) they fold into one *Quick prompts* menu in the
+toolbar. Configure them under *Settings -> Agents & runs -> Quick prompts* (one
 label + prompt per row), or set the `quick_prompts` key directly:
 
 ```

@@ -56,12 +56,12 @@ offers four ways to look at it:
   why and what to do.
 - **Terminal** -- the real TUI via xterm.js: answer, approve and interrupt exactly as in a terminal.
 - **Split** -- both side by side. **Diff** -- what the run changed in the working tree.
-- **Report** -- the agent's final report in its own pane with a **Mark done** button. It opens by itself when the report
-  is written and warns when the conversation went on after it.
+- **Report** -- the agent's final report in its own pane. It opens by itself when the report is written and warns
+  when the conversation went on after it.
 
 Sessions run in the background (the button shows a spinner; re-opening reattaches to the live session). **Pause** ends
-a session resumably, marking a task **done** ends it for good. An open task whose session already ended gets a
-**resume** button next to Run, which continues that conversation instead of starting over. With a claude.ai
+a session resumably, marking a task **done** ends it for good. An open task whose session already ended shows a
+**resume** button in place of Run, which continues that conversation; starting over sits in the row's menu. With a claude.ai
 subscription, the topbar shows the 5-hour and weekly usage limits as meters. The conversation view needs a readable
 transcript (Claude Code); OpenCode and Pi get the terminal. See [docs/claude-runs.md](docs/claude-runs.md).
 

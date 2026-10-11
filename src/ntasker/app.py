@@ -912,6 +912,9 @@ def build_js_strings() -> dict[str, str]:
             "Continue this task's last session -- the run button next to it "
             "would start over with a fresh prompt."
         ),
+        "claude_run_fresh": _("Start over with a fresh prompt"),
+        "more_actions": _("More actions"),
+        "quick_prompts": _("Quick prompts"),
         "claude_switch_session": _("Switch to session"),
         "claude_waiting": _("The agent is waiting for your input"),
         "claude_external": _(

@@ -252,6 +252,97 @@
                 </template>
             </label>
 {% endmacro %}
+{# Action slots of a task row / board card -- the same three everywhere: the #}
+{# agent button (resume when the task already has a session, else run), edit, #}
+{# and a "..." menu with everything else. `compact` is the tighter board form. #}
+{% macro task_actions(compact=false) %}
+{% set b = 'btn btn-sm' ~ (' px-1 py-0' if compact else '') %}
+                <template x-if="canResumeOpen(task)">
+                    <button class="{{ b }} btn-claude" @click.stop="resumeTask(task)"
+                            :aria-label="$i18n('claude_resume')" :title="$i18n('claude_resume_open')">
+                        <img :src="agentIconUrl(task)" class="claude-logo-icon" alt="">
+                        <i class="ti ti-rotate-clockwise-2 claude-resume-glyph"></i>
+                    </button>
+                </template>
+                {# Run -- only when the agent CLI + a PTY are available. The session #}
+                {# indicator (spinner / waiting) sits INSIDE the button, left of the #}
+                {# logo -- one pill; clicking a live one opens the session. #}
+                <template x-if="!canResumeOpen(task) && taskRunnable(task) && task.status !== 'done'">
+                    <button class="{{ b }} btn-claude" @click.stop="runNext(task)"
+                            :disabled="taskRunPhase(task.id) === 'external' || (task.draft && !taskRunPhase(task.id))"
+                            :class="{'btn-claude-waiting': taskRunPhase(task.id) === 'waiting'}"
+                            :aria-label="runButtonTitle(task)" :title="runButtonTitle(task)">
+                        <template x-if="['running', 'external'].includes(taskRunPhase(task.id))"><span class="spinner-border spinner-border-sm text-secondary"></span></template>
+                        <template x-if="taskRunPhase(task.id) === 'waiting'"><i class="ti ti-help fs-3"></i></template>
+                        <img :src="agentIconUrl(task)" class="claude-logo-icon" alt="">
+                    </button>
+                </template>
+                {# Agent CLI not installed: greyed-out logo in a non-clickable box, so #}
+                {# you still see which agent the task uses and the slot keeps its width. #}
+                <template x-if="!taskRunnable(task) && task.status !== 'done' && agentIconUrl(task)">
+                    <span class="{{ b }} btn-claude agent-logo-btn-disabled"
+                          :title="agentLabel(taskAgentKey(task)) + ' — ' + $i18n('agent_not_installed_hint')">
+                        <img :src="agentIconUrl(task)" class="claude-logo-icon agent-logo-disabled" alt="">
+                    </span>
+                </template>
+                {# Resume: reopen a finished task's stored session. #}
+                <template x-if="canResume(task)">
+                    <button class="{{ b }} btn-claude" @click.stop="openClaudeResume(task)"
+                            :aria-label="$i18n('claude_resume')" :title="$i18n('claude_resume')">
+                        <img :src="agentIconUrl(task)" class="claude-logo-icon" alt="">
+                        <i class="ti ti-rotate-clockwise-2 claude-resume-glyph"></i>
+                    </button>
+                </template>
+                <button class="{{ b }} btn-ghost-secondary" @click.stop="startEdit(task)"
+                        :aria-label="$i18n('edit')" :title="$i18n('edit')">
+                    <i class="ti ti-pencil fs-3"></i>
+                </button>
+                <span class="dropdown" x-data="actionMenu()" @click.outside="open = false">
+                    <button class="{{ b }} btn-ghost-secondary" @click.stop="toggle($event)"
+                            :aria-expanded="open ? 'true' : 'false'"
+                            :aria-label="$i18n('more_actions')" :title="$i18n('more_actions')">
+                        <i class="ti ti-dots-vertical fs-3"></i>
+                    </button>
+                    <div class="dropdown-menu" :class="{ show: open }" :style="style" x-cloak>
+                        <template x-if="task.report">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; openReport(task)">
+                                <i class="ti ti-file-text me-2"></i><span x-text="$i18n('report_open')"></span>
+                            </button>
+                        </template>
+                        <template x-if="task.has_diff">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; openDiff(task)">
+                                <i class="ti ti-file-diff me-2"></i><span x-text="$i18n('diff_open')"></span>
+                            </button>
+                        </template>
+                        {# The fresh start, while the agent button continues the last session. #}
+                        <template x-if="canResumeOpen(task)">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; runNext(task)">
+                                <i class="ti ti-player-play me-2"></i><span x-text="$i18n('claude_run_fresh')"></span>
+                            </button>
+                        </template>
+                        {# `ti-archive` (not `ti-archive-arrow-down`): the latter is missing #}
+                        {# from the vendored tabler-icons webfont (v3.19.0) and renders as #}
+                        {# an invisible-but-clickable phantom. #}
+                        <template x-if="!task.archived">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; archiveTask(task)">
+                                <i class="ti ti-archive me-2"></i><span x-text="$i18n('archive')"></span>
+                            </button>
+                        </template>
+                        <template x-if="task.archived">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; unarchiveTask(task)">
+                                <i class="ti ti-archive-off me-2"></i><span x-text="$i18n('unarchive')"></span>
+                            </button>
+                        </template>
+                        {# Delete is only valid for archived tasks. #}
+                        <template x-if="task.archived">
+                            <button type="button" class="dropdown-item text-danger" @click.stop="open = false; deleteTask(task)">
+                                <i class="ti ti-trash me-2"></i><span x-text="$i18n('delete_permanently')"></span>
+                            </button>
+                        </template>
+                    </div>
+                </span>
+{% endmacro %}
+
 {# Folded-family pill on a head row: how many children hide behind the #}
 {# chevron; lit up when one of them is part of the active filter.       #}
 {# One row of the session pick-up dialog -- same markup for the running and the #}
@@ -588,24 +679,23 @@
             <div class="container-fluid">
                 <div class="row g-2 align-items-center">
                     <div class="col-auto">
-                        <h2 class="page-title mb-0">
-                            <button type="button"
-                                    class="btn btn-ghost-secondary"
+                        {# Segmented control -- the one style for every view switch on the page. #}
+                        <div class="btn-group view-switch" role="group">
+                            <button type="button" class="btn btn-ghost-secondary"
                                     :class="viewMode === 'list' ? 'active' : ''"
                                     @click="setViewMode('list')">
-                                <i class="ti ti-list-check me-1 fs-2"></i>
+                                <i class="ti ti-list-check me-1 fs-3"></i>
                                 <span x-text="$i18n('view_list')"></span>
                             </button>
-                            <button type="button"
-                                    class="btn btn-ghost-secondary ms-1"
+                            <button type="button" class="btn btn-ghost-secondary"
                                     :class="viewMode === 'kanban' ? 'active' : ''"
                                     @click="setViewMode('kanban')">
                                 {# `ti-columns` is in the vendored Tabler-Icons #}
                                 {# webfont subset; `ti-layout-kanban` is not. #}
-                                <i class="ti ti-columns me-1 fs-2"></i>
+                                <i class="ti ti-columns me-1 fs-3"></i>
                                 <span x-text="$i18n('view_kanban')"></span>
                             </button>
-                        </h2>
+                        </div>
                     </div>
                     {# Page actions: "sort by priority" reset + "show all" reset + search box, far right. #}
                     <div class="col-auto ms-auto d-flex align-items-center">
@@ -615,22 +705,15 @@
                                 x-show="sortMode === 'manual'" x-cloak
                                 @click="setSortMode('priority')"
                                 :title="$i18n('sort_by_priority_title')">
-                            <i class="ti ti-arrows-sort me-1"></i>
+                            <i class="ti ti-arrows-sort me-1 fs-3"></i>
                             <span x-text="$i18n('sort_by_priority')"></span>
-                        </button>
-                        {# Carry on with a conversation started in a terminal. #}
-                        <button type="button" class="btn btn-ghost-secondary me-2"
-                                @click="openSessionPicker()"
-                                :title="$i18n('session_pickup_title')">
-                            <i class="ti ti-terminal-2 me-1"></i>
-                            <span x-text="$i18n('session_pickup')"></span>
                         </button>
                         {# Clears the search box and every filter; only shown while something is filtering. #}
                         <button type="button" class="btn btn-ghost-secondary me-2"
                                 x-show="hasActiveFilters" x-cloak
                                 @click="clearAllFilters()"
                                 :title="$i18n('show_all_tasks_title')">
-                            <i class="ti ti-filter-off me-1"></i>
+                            <i class="ti ti-filter-off me-1 fs-3"></i>
                             <span x-text="$i18n('show_all_tasks')"></span>
                         </button>
                         <div class="input-icon search-box search-box-header">
@@ -1185,6 +1268,12 @@
                             <span x-text="$i18n('run_log')"></span>
                             <span class="badge bg-secondary-lt ms-1" x-text="outcomes.length"></span>
                         </button>
+                        {# Carry on with a conversation started in a terminal. #}
+                        <button type="button" class="btn btn-sm btn-ghost-secondary btn-icon"
+                                @click="openSessionPicker()"
+                                :title="$i18n('session_pickup')" :aria-label="$i18n('session_pickup')">
+                            <i class="ti ti-terminal-2 fs-3"></i>
+                        </button>
                         {# The two queue-wide controls, pushed right as one block #}
                         {# so they stay together whether or not the planner shows. #}
                         <div class="d-flex align-items-center gap-2 ms-auto">
@@ -1384,30 +1473,24 @@
                     </div>
                 </div>
 
-                {# Tabs -- list view only. Kanban renders its own column layout below. #}
-                <ul class="nav nav-tabs mb-3" role="tablist" x-show="viewMode === 'list'" x-cloak>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" :class="tab === 'open' ? 'active' : ''" @click="setTab('open')">
-                            <i class="ti ti-list me-1"></i>
-                            {{ t('Open') }}
-                            <span class="badge bg-blue-lt ms-1" x-text="counts.open"></span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" :class="tab === 'done' ? 'active' : ''" @click="setTab('done')">
-                            <i class="ti ti-check me-1"></i>
-                            {{ t('Done') }}
-                            <span class="badge bg-green-lt ms-1" x-text="counts.done"></span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" :class="tab === 'archive' ? 'active' : ''" @click="setTab('archive')">
-                            <i class="ti ti-archive me-1"></i>
-                            {{ t('Archive') }}
-                            <span class="badge bg-secondary-lt ms-1" x-text="counts.archive"></span>
-                        </button>
-                    </li>
-                </ul>
+                {# Status switch -- list view only. Kanban renders its own column layout below. #}
+                <div class="btn-group view-switch mb-3" role="group" x-show="viewMode === 'list'" x-cloak>
+                    <button type="button" class="btn btn-ghost-secondary" :class="tab === 'open' ? 'active' : ''" @click="setTab('open')">
+                        <i class="ti ti-list me-1 fs-3"></i>
+                        {{ t('Open') }}
+                        <span class="badge bg-blue-lt ms-1" x-text="counts.open"></span>
+                    </button>
+                    <button type="button" class="btn btn-ghost-secondary" :class="tab === 'done' ? 'active' : ''" @click="setTab('done')">
+                        <i class="ti ti-check me-1 fs-3"></i>
+                        {{ t('Done') }}
+                        <span class="badge bg-green-lt ms-1" x-text="counts.done"></span>
+                    </button>
+                    <button type="button" class="btn btn-ghost-secondary" :class="tab === 'archive' ? 'active' : ''" @click="setTab('archive')">
+                        <i class="ti ti-archive me-1 fs-3"></i>
+                        {{ t('Archive') }}
+                        <span class="badge bg-secondary-lt ms-1" x-text="counts.archive"></span>
+                    </button>
+                </div>
 
                 {# Task list #}
                 <div class="card" x-show="viewMode === 'list'" x-cloak>
@@ -1625,87 +1708,7 @@
                                     </div>
                                     <div class="col-auto">
                                         <div class="btn-list">
-                                            {# Continue the task's last session instead of starting it over. #}
-                                            {# Sits left of the run button: same agent logo, rotate glyph. #}
-                                            <template x-if="canResumeOpen(task)">
-                                                <button class="btn btn-sm btn-claude" @click="resumeTask(task)"
-                                                        :aria-label="$i18n('claude_resume')"
-                                                        :title="$i18n('claude_resume_open')">
-                                                    <img :src="agentIconUrl(task)" class="claude-logo-icon" alt="">
-                                                    <i class="ti ti-rotate-clockwise-2 claude-resume-glyph"></i>
-                                                </button>
-                                            </template>
-                                            {# Run with Claude -- only when the `claude` CLI + a PTY are available. #}
-                                            {# Runnable: the session indicator (spinner / waiting) sits INSIDE the #}
-                                            {# button, left of the logo -- one pill, and clicking anywhere on it #}
-                                            {# opens the session, like the state links in the queue panel. #}
-                                            <template x-if="taskRunnable(task) && task.status !== 'done'">
-                                                <button class="btn btn-sm btn-claude" @click="runNext(task)"
-                                                        :disabled="taskRunPhase(task.id) === 'external' || (task.draft && !taskRunPhase(task.id))"
-                                                        :class="{'btn-claude-waiting': taskRunPhase(task.id) === 'waiting'}"
-                                                        :aria-label="runButtonTitle(task)"
-                                                        :title="runButtonTitle(task)">
-                                                    <template x-if="['running', 'external'].includes(taskRunPhase(task.id))"><span class="spinner-border spinner-border-sm text-secondary"></span></template>
-                                                    <template x-if="taskRunPhase(task.id) === 'waiting'"><i class="ti ti-help fs-3"></i></template>
-                                                    <img :src="agentIconUrl(task)" class="claude-logo-icon" alt="">
-                                                </button>
-                                            </template>
-                                            {# Agent CLI not installed: no button (it would go nowhere) -- just a #}
-                                            {# greyed-out agent logo so you still see which agent the task uses. #}
-                                            <template x-if="!taskRunnable(task) && task.status !== 'done' && agentIconUrl(task)">
-                                                <span class="btn btn-sm btn-claude agent-logo-btn-disabled"
-                                                      :title="agentLabel(taskAgentKey(task)) + ' — ' + $i18n('agent_not_installed_hint')">
-                                                    <img :src="agentIconUrl(task)" class="claude-logo-icon agent-logo-disabled" alt="">
-                                                </span>
-                                            </template>
-                                            {# Resume: reopen a finished task's stored Claude session. #}
-                                            <template x-if="canResume(task)">
-                                                <button class="btn btn-sm btn-claude" @click="openClaudeResume(task)"
-                                                        :aria-label="$i18n('claude_resume')" :title="$i18n('claude_resume')">
-                                                    <img :src="agentIconUrl(task)" class="claude-logo-icon" alt="">
-                                                    <i class="ti ti-rotate-clockwise-2 claude-resume-glyph"></i>
-                                                </button>
-                                            </template>
-                                            {# The agent's final report, when one was written. #}
-                                            <template x-if="task.report">
-                                                <button class="btn btn-sm btn-ghost-secondary" @click="openReport(task)"
-                                                        :aria-label="$i18n('report_open')" :title="$i18n('report_open')">
-                                                    <i class="ti ti-file-text fs-3"></i>
-                                                </button>
-                                            </template>
-                                            {# What the task's run changed (once it has run). #}
-                                            <template x-if="task.has_diff">
-                                                <button class="btn btn-sm btn-ghost-secondary" @click="openDiff(task)"
-                                                        :aria-label="$i18n('diff_open')" :title="$i18n('diff_open')">
-                                                    <i class="ti ti-file-diff fs-3"></i>
-                                                </button>
-                                            </template>
-                                            <button class="btn btn-sm btn-ghost-secondary" @click="startEdit(task)"
-                                                    :aria-label="$i18n('edit')" :title="$i18n('edit')">
-                                                <i class="ti ti-pencil fs-3"></i>
-                                            </button>
-                                            <template x-if="!task.archived">
-                                                {# Use `ti-archive` (not `ti-archive-arrow-down`): the latter is #}
-                                                {# missing from the vendored tabler-icons webfont (v3.19.0). Using #}
-                                                {# a missing class produces an invisible-but-clickable phantom button. #}
-                                                <button class="btn btn-sm btn-ghost-secondary" @click="archiveTask(task)"
-                                                        :aria-label="$i18n('archive')" :title="$i18n('archive')">
-                                                    <i class="ti ti-archive fs-3"></i>
-                                                </button>
-                                            </template>
-                                            <template x-if="task.archived">
-                                                <button class="btn btn-sm btn-ghost-secondary" @click="unarchiveTask(task)"
-                                                        :aria-label="$i18n('unarchive')" :title="$i18n('unarchive')">
-                                                    <i class="ti ti-archive-off fs-3"></i>
-                                                </button>
-                                            </template>
-                                            {# Delete is only valid for archived tasks. #}
-                                            <template x-if="task.archived">
-                                                <button class="btn btn-sm btn-ghost-danger" @click="deleteTask(task)"
-                                                        :aria-label="$i18n('delete')" :title="$i18n('delete_permanently')">
-                                                    <i class="ti ti-trash fs-3"></i>
-                                                </button>
-                                            </template>
+{{ task_actions() }}
                                         </div>
                                     </div>
                                 </div>
@@ -1792,64 +1795,7 @@
                                                       @click.stop="copyId(task.id)"
                                                       x-text="`#${task.id}`"></span>
                                                 <div class="kanban-card-actions">
-                                                    {# Continue the last session instead of starting over -- see the list row. #}
-                                                    <template x-if="canResumeOpen(task)">
-                                                        <button class="btn btn-sm btn-claude px-1 py-0" @click.stop="resumeTask(task)"
-                                                                :aria-label="$i18n('claude_resume')"
-                                                                :title="$i18n('claude_resume_open')">
-                                                            <img :src="agentIconUrl(task)" class="claude-logo-icon" alt="">
-                                                            <i class="ti ti-rotate-clockwise-2 claude-resume-glyph"></i>
-                                                        </button>
-                                                    </template>
-                                                    {# Runnable: session indicator (spinner / waiting) INSIDE the button, #}
-                                                    {# left of the logo -- see the list row. #}
-                                                    <template x-if="taskRunnable(task) && task.status !== 'done'">
-                                                        <button class="btn btn-sm btn-claude px-1 py-0"
-                                                                @click.stop="runNext(task)"
-                                                                :disabled="taskRunPhase(task.id) === 'external' || (task.draft && !taskRunPhase(task.id))"
-                                                                :class="{'btn-claude-waiting': taskRunPhase(task.id) === 'waiting'}"
-                                                                :aria-label="runButtonTitle(task)"
-                                                                :title="runButtonTitle(task)">
-                                                            <template x-if="['running', 'external'].includes(taskRunPhase(task.id))"><span class="spinner-border spinner-border-sm text-secondary"></span></template>
-                                                            <template x-if="taskRunPhase(task.id) === 'waiting'"><i class="ti ti-help fs-3"></i></template>
-                                                            <img :src="agentIconUrl(task)" class="claude-logo-icon" alt="">
-                                                        </button>
-                                                    </template>
-                                                    {# Agent CLI not installed: greyed-out logo in a non-clickable button #}
-                                                    {# box so it lines up exactly with the run buttons on other cards. #}
-                                                    <template x-if="!taskRunnable(task) && task.status !== 'done' && agentIconUrl(task)">
-                                                        <span class="btn btn-sm btn-claude px-1 py-0 agent-logo-btn-disabled"
-                                                              :title="agentLabel(taskAgentKey(task)) + ' — ' + $i18n('agent_not_installed_hint')">
-                                                            <img :src="agentIconUrl(task)" class="claude-logo-icon agent-logo-disabled" alt="">
-                                                        </span>
-                                                    </template>
-                                                    {# Resume: reopen a finished task's stored Claude session. #}
-                                                    <template x-if="canResume(task)">
-                                                        <button class="btn btn-sm btn-claude px-1 py-0" @click.stop="openClaudeResume(task)"
-                                                                :aria-label="$i18n('claude_resume')" :title="$i18n('claude_resume')">
-                                                            <img :src="agentIconUrl(task)" class="claude-logo-icon" alt="">
-                                                            <i class="ti ti-rotate-clockwise-2 claude-resume-glyph"></i>
-                                                        </button>
-                                                    </template>
-                                                    <template x-if="task.report">
-                                                        <button class="btn btn-sm btn-ghost-secondary px-1 py-0"
-                                                                @click.stop="openReport(task)"
-                                                                :aria-label="$i18n('report_open')" :title="$i18n('report_open')">
-                                                            <i class="ti ti-file-text fs-3"></i>
-                                                        </button>
-                                                    </template>
-                                                    <template x-if="task.has_diff">
-                                                        <button class="btn btn-sm btn-ghost-secondary px-1 py-0"
-                                                                @click.stop="openDiff(task)"
-                                                                :aria-label="$i18n('diff_open')" :title="$i18n('diff_open')">
-                                                            <i class="ti ti-file-diff fs-3"></i>
-                                                        </button>
-                                                    </template>
-                                                    <button class="btn btn-sm btn-ghost-secondary px-1 py-0"
-                                                            @click.stop="startEdit(task)"
-                                                            :aria-label="$i18n('edit')" :title="$i18n('edit')">
-                                                        <i class="ti ti-pencil fs-3"></i>
-                                                    </button>
+{{ task_actions(compact=true) }}
                                                 </div>
                                             </div>
 
@@ -2014,54 +1960,62 @@
                     {# the report as a side pane) on the left, the run's actions on the right. #}
                     <template x-if="activeTab">
                     <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
-                        <div class="btn-group claude-view-switch" role="group" :aria-label="$i18n('conv_views')">
+                        <div class="btn-group view-switch" role="group" :aria-label="$i18n('conv_views')">
                             <template x-if="runConvSupported">
-                                <button type="button" class="btn" :class="runView === 'chat' ? 'btn-primary' : 'btn-outline-secondary'"
+                                <button type="button" class="btn btn-ghost-secondary" :class="runView === 'chat' ? 'active' : ''"
                                         :title="$i18n('conv_show')" @click="showRunView('chat')">
                                     <i class="ti ti-messages me-1 fs-3"></i><span x-text="$i18n('conv_title')"></span>
                                 </button>
                             </template>
                             <template x-if="runConvSupported">
-                                <button type="button" class="btn" :class="runView === 'split' ? 'btn-primary' : 'btn-outline-secondary'"
+                                <button type="button" class="btn btn-ghost-secondary" :class="runView === 'split' ? 'active' : ''"
                                         :title="$i18n('conv_show_split')" @click="showRunView('split')">
                                     <i class="ti ti-layout-columns me-1 fs-3"></i><span x-text="$i18n('conv_split')"></span>
                                 </button>
                             </template>
-                            <button type="button" class="btn" :class="runView === 'terminal' ? 'btn-primary' : 'btn-outline-secondary'"
+                            <button type="button" class="btn btn-ghost-secondary" :class="runView === 'terminal' ? 'active' : ''"
                                     :title="$i18n('conv_show_terminal_hint')" @click="showRunView('terminal')">
                                 <i class="ti ti-terminal-2 me-1 fs-3"></i><span x-text="$i18n('conv_terminal')"></span>
                             </button>
-                            <button type="button" class="btn" :class="runView === 'diff' ? 'btn-primary' : 'btn-outline-secondary'"
+                            <button type="button" class="btn btn-ghost-secondary" :class="runView === 'diff' ? 'active' : ''"
                                     :title="$i18n('diff_open')" @click="showRunView('diff')">
                                 <i class="ti ti-file-diff me-1 fs-3"></i><span x-text="$i18n('diff_title')"></span>
                             </button>
-                        </div>
-                        {# The report beside the current view -- a split, not a view of its own. #}
-                        <template x-if="runReportAvailable">
-                            <button type="button" class="btn btn-outline-secondary" :class="runReportOpen && 'active'"
-                                    :title="$i18n('conv_report_side')" @click="toggleRunReport()">
-                                <i class="ti ti-layout-sidebar-right me-1 fs-3"></i><span x-text="$i18n('report_title')"></span>
-                            </button>
-                        </template>
-                        <span class="ms-auto d-flex align-items-center gap-2 flex-wrap">
-                            <template x-for="p in quickPrompts" :key="p.label">
-                                <button type="button" class="btn btn-ghost-secondary" :title="p.prompt"
-                                        :disabled="activeTab?.status === 'exited'" @click="sendQuickPrompt(p.prompt)">
-                                    <i class="ti ti-message-forward me-1 fs-3"></i><span x-text="p.label"></span>
+                            {# The report beside the current view -- a toggle, not a view of its own. #}
+                            <template x-if="runReportAvailable">
+                                <button type="button" class="btn btn-ghost-secondary" :class="runReportOpen ? 'active' : ''"
+                                        :title="$i18n('conv_report_side')" @click="toggleRunReport()">
+                                    <i class="ti ti-layout-sidebar-right me-1 fs-3"></i><span x-text="$i18n('report_title')"></span>
                                 </button>
                             </template>
-                            <div class="btn-group">
-                                {# Primary once the agent handed the task over for review. #}
-                                <button type="button" class="btn" @click="markDoneFromClaudeRun()"
-                                        :class="runTask && runTask.phase === 'review' ? 'btn-success' : 'btn-outline-success'">
-                                    <i class="ti ti-check me-1 fs-3"></i><span x-text="$i18n('claude_mark_done')"></span>
-                                </button>
-                                <template x-if="activeTab && activeTab?.status !== 'exited'">
-                                    <button type="button" class="btn btn-outline-warning" :title="$i18n('claude_stop_title')" @click="stopClaudeRun()">
-                                        <i class="ti ti-player-pause me-1 fs-3"></i><span x-text="$i18n('claude_stop')"></span>
+                        </div>
+                        <span class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+                            {# Quick prompts live above the reply box (see _conversation.html); #}
+                            {# without a conversation pane they fold into one menu here. #}
+                            <template x-if="quickPrompts.length && !runChatShown">
+                                <span class="dropdown" x-data="actionMenu()" @click.outside="open = false">
+                                    <button type="button" class="btn btn-ghost-secondary" @click="toggle($event)"
+                                            :disabled="activeTab?.status === 'exited'" :aria-expanded="open ? 'true' : 'false'">
+                                        <i class="ti ti-message-forward me-1 fs-3"></i><span x-text="$i18n('quick_prompts')"></span>
                                     </button>
-                                </template>
-                            </div>
+                                    <div class="dropdown-menu" :class="{ show: open }" :style="style" x-cloak>
+                                        <template x-for="p in quickPrompts" :key="p.label">
+                                            <button type="button" class="dropdown-item" :title="p.prompt"
+                                                    @click="open = false; sendQuickPrompt(p.prompt)" x-text="p.label"></button>
+                                        </template>
+                                    </div>
+                                </span>
+                            </template>
+                            {# Solid once the agent handed the task over for review. #}
+                            <button type="button" class="btn" @click="markDoneFromClaudeRun()"
+                                    :class="runTask && runTask.phase === 'review' ? 'btn-success' : 'btn-outline-success'">
+                                <i class="ti ti-check me-1 fs-3"></i><span x-text="$i18n('claude_mark_done')"></span>
+                            </button>
+                            <template x-if="activeTab && activeTab?.status !== 'exited'">
+                                <button type="button" class="btn btn-ghost-warning" :title="$i18n('claude_stop_title')" @click="stopClaudeRun()">
+                                    <i class="ti ti-player-pause me-1 fs-3"></i><span x-text="$i18n('claude_stop')"></span>
+                                </button>
+                            </template>
                         </span>
                     </div>
                     </template>
@@ -2099,12 +2053,6 @@
                                         <span class="text-secondary small" x-show="runReportWhen"
                                               x-text="$i18n('report_written_at', {when: runReportWhen})"></span>
                                         <span class="flex-fill"></span>
-                                        <template x-if="runReportTask?.status !== 'done'">
-                                            <button type="button" class="btn btn-sm" @click="markDoneFromClaudeRun()"
-                                                    :class="runReportTask?.phase === 'review' ? 'btn-success' : 'btn-outline-success'">
-                                                <i class="ti ti-check me-1"></i><span x-text="$i18n('claude_mark_done')"></span>
-                                            </button>
-                                        </template>
                                         <button type="button" class="btn btn-sm btn-ghost-secondary btn-icon"
                                                 :title="$i18n('close')" :aria-label="$i18n('close')" @click="toggleRunReport()">
                                             <i class="ti ti-x"></i>
