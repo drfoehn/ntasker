@@ -2015,14 +2015,14 @@
                                     :title="$i18n('diff_open')" @click="showRunView('diff')">
                                 <i class="ti ti-file-diff me-1 fs-3"></i><span x-text="$i18n('diff_title')"></span>
                             </button>
-                            {# The report beside the current view -- a toggle, not a view of its own. #}
-                            <template x-if="runReportAvailable">
-                                <button type="button" class="btn btn-ghost-secondary" :class="runReportOpen ? 'active' : ''"
-                                        :title="$i18n('conv_report_side')" @click="toggleRunReport()">
-                                    <i class="ti ti-layout-sidebar-right me-1 fs-3"></i><span x-text="$i18n('report_title')"></span>
-                                </button>
-                            </template>
                         </div>
+                        {# The report beside the current view -- a toggle independent of the view switch. #}
+                        <template x-if="runReportAvailable">
+                            <button type="button" class="btn btn-ghost-secondary" :class="runReportOpen ? 'active' : ''"
+                                    :title="$i18n('conv_report_side')" @click="toggleRunReport()">
+                                <i class="ti ti-layout-sidebar-right me-1 fs-3"></i><span x-text="$i18n('report_title')"></span>
+                            </button>
+                        </template>
                         <span class="ms-auto d-flex align-items-center gap-2 flex-wrap">
                             {# Quick prompts live above the reply box (see _conversation.html); #}
                             {# without a conversation pane they fold into one menu here. #}
