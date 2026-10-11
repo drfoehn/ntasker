@@ -78,6 +78,8 @@ across projects too -- drop it on the **middle** of the other; the edges keep re
 and closes itself and hands its result to the tasks depending on it; the **Run-Log** collects those outcomes. **Plan
 queue** lets an agent session order the queue for you and start it. See [docs/task-queue.md](docs/task-queue.md).
 
+![Kanban board with the queue panel above it, the running task in its In Progress column](docs/screenshot2.jpg)
+
 ### The inbox sorts your ideas
 
 Type a raw thought into the topbar field (`Ctrl+K`) or `ntasker in "..."` and carry on. A stateless `claude -p` call
