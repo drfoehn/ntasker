@@ -49,11 +49,13 @@ from ntasker.claude_runner import (
     active_session_ids,
     bind_session,
     external_session_ids,
+    open_questions,
     planner_seed,
     projects_base_dir,
     register_external,
     session_states,
     set_hook_state,
+    set_question,
     start_detached_session,
     stop_session,
     terminal_available,
@@ -65,7 +67,7 @@ from ntasker.projects import (
     stale_claude_projects,
 )
 from ntasker.rundiff import changed_paths, parse_baselines, run_diff
-from ntasker.transcript import conversation_for, last_activity
+from ntasker.transcript import conversation_for, last_activity, question_entries
 from ntasker import completion, locks, plugins, sessions, taskqueue, triage, worktrees
 from ntasker.newproject import created_projects
 from ntasker.newproject import router as newproject_router
@@ -708,6 +710,15 @@ def build_js_strings() -> dict[str, str]:
         "conv_allow": _("Allow"),
         "conv_deny": _("Deny"),
         "conv_answer_in_terminal": _("Answer in the terminal"),
+        # The agent's questions (AskUserQuestion): the open one and the answered ones
+        "conv_decision": _("Decision"),
+        "conv_decision_open": _("The agent needs your decision"),
+        "conv_decision_none": _("Not answered"),
+        "conv_decision_other": _("Something else ..."),
+        "conv_decision_pick_one": _("Pick one"),
+        "conv_decision_pick_any": _("Pick any"),
+        "conv_decision_submit": _("Send answers"),
+        "conv_decision_hint": _("Your answers go into the dialog in the terminal. To discuss instead, open the terminal."),
         "conv_kind_edit": _("Edited: {n}"),
         "conv_kind_read": _("Read: {n}"),
         "conv_kind_bash": _("Commands: {n}"),
@@ -1758,6 +1769,9 @@ def api_claude_sessions() -> JSONResponse:
     ``activity``: what each active session did last (id -> ``{name, kind,
     detail}`` or ``{text}``, see :func:`ntasker.transcript.last_activity`) --
     the status line on a running task's card; only agents with a transcript.
+    ``questions``: the question each waiting session asks right now (id ->
+    ``{id, questions}``, see :func:`api_claude_session_question`) -- the
+    conversation pane's question card.
     """
     states = session_states()
     active = list(states.keys())
@@ -1795,6 +1809,7 @@ def api_claude_sessions() -> JSONResponse:
             "projects": projects,
             "titles": titles,
             "activity": activity,
+            "questions": open_questions(),
         }
     )
 
@@ -1961,6 +1976,30 @@ def api_claude_session_state(task_id: int, payload: SessionStateIn) -> JSONRespo
     404 when the task has no live session.
     """
     if not set_hook_state(task_id, payload.waiting):
+        raise HTTPException(status_code=404, detail=_("No live session for this task"))
+    return JSONResponse({"ok": True})
+
+
+class SessionQuestionIn(BaseModel):
+    id: str | None = None
+    questions: list
+
+
+@app.post("/api/claude/sessions/{task_id}/question")
+def api_claude_session_question(task_id: int, payload: SessionQuestionIn) -> JSONResponse:
+    """The question a session is asking, reported by its ``AskUserQuestion`` hook.
+
+    Called by ``ntasker hook ask`` (``PreToolUse``) with the tool call's id and
+    its raw ``questions``. Claude Code writes the call to the transcript only
+    once it is answered, so this is how the conversation pane shows an open
+    question. Kept on the live session until its next ``running`` hook; listed
+    by ``GET /api/claude/sessions`` as ``questions``. 404 when the task has no
+    live session, 400 without a usable question.
+    """
+    questions = question_entries(payload.questions)
+    if not questions:
+        raise HTTPException(status_code=400, detail=_("No question in the payload"))
+    if not set_question(task_id, {"id": payload.id, "questions": questions}):
         raise HTTPException(status_code=404, detail=_("No live session for this task"))
     return JSONResponse({"ok": True})
 

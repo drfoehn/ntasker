@@ -13,6 +13,7 @@
       {"hooks": [{"type": "command", "command": "ntasker hook running"}]}
     ],
     "PreToolUse": [
+      {"matcher": "AskUserQuestion", "hooks": [{"type": "command", "command": "ntasker hook ask"}]},
       {"matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash", "hooks": [{"type": "command", "command": "ntasker hook pretooluse"}]}
     ]
   }

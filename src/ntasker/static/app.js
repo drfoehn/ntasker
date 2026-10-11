@@ -496,6 +496,17 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // What stops the session right now ({kind, text, at}: usage limit, not
         // logged in, API unreachable ...) -- the last turn's blocker, or null.
         convBlocker: null,
+        // The question each waiting session asks right now ({taskId: {id,
+        // questions}}), from the session poll -- reported by the agent's own
+        // hook, because the transcript only gets the call once it is answered.
+        claudeQuestions: {},
+        // What has been picked / typed for the open question so far: one
+        // picks list (option indexes) and one free text per question, keyed
+        // so a new question starts blank.
+        convAnswerDraft: { key: null, picks: [], text: [] },
+        // The question just answered from the pane: its card stays hidden
+        // until the session's hook has cleared it.
+        convAnswered: null,
         // What each live session did last ({taskId: {name, kind, detail} | {text}}),
         // from the session poll -- the status line on a running task's card.
         claudeActivity: {},
@@ -3660,6 +3671,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                     this._sessionsRestRaw = rest;
                     this.claudeSessions = d.active || [];
                     this.claudeWaiting = d.waiting || [];
+                    this.claudeQuestions = d.questions || {};
                     this.claudeExternal = d.external || [];
                     this.claudeSessionProjects = d.projects || {};
                     this.claudeSessionTitles = d.titles || {};
@@ -4323,7 +4335,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                 // session state at this pace too, so its card shows up quickly
                 // (the board's own session poll runs every 5 s).
                 const last = this.convTurns[this.convTurns.length - 1];
-                if (last && last.pending) this.loadClaudeSessions();
+                if ((last && last.pending) || this.convPrompt) this.loadClaudeSessions();
             }, 2500);
         },
 
@@ -4354,6 +4366,10 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                 const old = prev[i];
                 const html = (text, oldText, oldHtml) => (old && oldText === text ? oldHtml : renderMarkdown(text || ''));
                 const edited = [...new Set(t.tools.filter(x => x.kind === 'edit' && x.file).map(x => x.file))];
+                // The agent's questions with what was answered. An unanswered
+                // one in the running turn is the open question (its own card).
+                const decisions = t.tools.filter(x => x.kind === 'ask' && x.questions && x.questions.length
+                    && (x.answers || t.done));
                 return {
                     ...t,
                     preview: _convPreview(t.prompt),
@@ -4363,6 +4379,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                     progressHtml: t.progress.map((p, j) => (old && old.progress[j] === p ? old.progressHtml[j] : renderMarkdown(p))),
                     kinds: this._stepKinds(t.tools),
                     editedFiles: edited,
+                    decisions,
                 };
             });
             if (atBottom) {
@@ -4429,20 +4446,28 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                 || 'ti-plug-connected-x';
         },
 
-        // The unresolved tool call of the last turn while the session waits.
+        // What the waiting session is blocked on: the question its hook
+        // reported, else the unresolved tool call of the last turn.
         get convPending() {
             const tab = this.activeTab;
+            if (!tab || tab.status !== 'waiting') return null;
+            const q = this.claudeQuestions[String(tab.taskId)];
+            if (q) return { id: q.id, name: 'AskUserQuestion', kind: 'ask', questions: q.questions };
             const last = this.convTurns[this.convTurns.length - 1];
-            if (!tab || tab.status !== 'waiting' || !last || !last.pending) return null;
-            return last.pending;
+            return last && last.pending ? last.pending : null;
         },
 
         // What the waiting session asks for: 'ask' (a question), 'permission'
-        // (a tool call to approve) or null (just its turn is over).
+        // (a tool call to approve) or null (just its turn is over, or the
+        // question was just answered here).
         get convPrompt() {
             const p = this.convPending;
             if (!p) return null;
-            return p.kind === 'ask' && p.questions && p.questions.length ? 'ask' : 'permission';
+            if (p.kind === 'ask') {
+                if (!p.questions || !p.questions.length || (p.id && p.id === this.convAnswered)) return null;
+                return 'ask';
+            }
+            return 'permission';
         },
 
         // Answer the permission dialog in the terminal: Enter picks the
@@ -4451,18 +4476,109 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             this._sendKeys(allow ? '\r' : '\x1b');
         },
 
-        // Pick option ``index`` of a single-select question: arrow down to it,
-        // then Enter.
-        answerQuestion(index) {
-            this._sendKeys('\x1b[B'.repeat(index));
-            setTimeout(() => this._sendKeys('\r'), 80);
+        // ---- Answering the agent's question (AskUserQuestion) ----
+        // The draft for the open question ``p``; a different question (or
+        // task) starts a blank one and brings its card into view.
+        ensureAnswerDraft(p) {
+            const key = `${this.claudeView}:${p.id || ''}:${p.questions.length}`;
+            if (this.convAnswerDraft.key === key) return;
+            this.convAnswerDraft = { key, picks: p.questions.map(() => []), text: p.questions.map(() => '') };
+            this.$nextTick(() => {
+                const el = this.$refs.convBody;
+                if (el) el.scrollTop = el.scrollHeight;
+            });
+        },
+
+        answerPicked(qi, oi) {
+            return (this.convAnswerDraft.picks[qi] || []).includes(oi);
+        },
+
+        // Pick an option: a multi-select toggles it, a single-select replaces
+        // the pick. The only question of a single-select dialog is answered
+        // by the click itself, as in the terminal.
+        pickAnswer(qi, oi) {
+            const p = this.convPending;
+            if (!p || !p.questions[qi]) return;
+            const q = p.questions[qi];
+            const picks = this.convAnswerDraft.picks[qi] || [];
+            if (q.multi) {
+                this.convAnswerDraft.picks[qi] = picks.includes(oi) ? picks.filter(x => x !== oi) : [...picks, oi].sort();
+                return;
+            }
+            this.convAnswerDraft.picks[qi] = [oi];
+            this.convAnswerDraft.text[qi] = '';
+            if (p.questions.length === 1) this.submitAnswers();
+        },
+
+        // Every question has a pick or a typed answer.
+        answersReady() {
+            const p = this.convPending;
+            if (!p || p.kind !== 'ask') return false;
+            return p.questions.every((_q, qi) => (this.convAnswerDraft.text[qi] || '').trim()
+                || (this.convAnswerDraft.picks[qi] || []).length);
+        },
+
+        // Answer the dialog in the terminal key by key, the way Claude Code's
+        // dialog takes it: a digit picks an option (and moves on to the next
+        // question), digits toggle a multi-select's options and Tab moves on,
+        // "Type something" is the digit after the options followed by the
+        // text and Enter. A single-select-only dialog with one question is
+        // done with the digit; anything else ends on a review page that
+        // Enter submits. Keys go one at a time so the dialog keeps up.
+        async submitAnswers() {
+            const p = this.convPending;
+            if (!p || p.kind !== 'ask' || !this.answersReady()) return;
+            const draft = this.convAnswerDraft;
+            const keys = [];
+            let review = p.questions.length > 1;
+            p.questions.forEach((q, qi) => {
+                const text = (draft.text[qi] || '').trim();
+                const picks = draft.picks[qi] || [];
+                if (text) keys.push(String(q.options.length + 1), text, '\r');
+                else if (q.multi) keys.push(...picks.map(oi => String(oi + 1)), '\t');
+                else keys.push(String(picks[0] + 1));
+                review = review || q.multi || !!text;
+            });
+            if (review) keys.push('\r');
+            this.convAnswered = p.id || null;
+            for (const k of keys) {
+                if (!this._sendRaw(k)) break;
+                await new Promise(resolve => setTimeout(resolve, 120));
+            }
+            setTimeout(() => this.loadClaudeSessions(), 400);
+        },
+
+        _sendRaw(data) {
+            const s = _claudeTerms.get(this.claudeView);
+            if (!s || s.ws.readyState !== WebSocket.OPEN) return false;
+            if (data) s.ws.send(JSON.stringify({ type: 'input', data }));
+            return true;
         },
 
         _sendKeys(data) {
-            const s = _claudeTerms.get(this.claudeView);
-            if (!s || s.ws.readyState !== WebSocket.OPEN) return;
-            if (data) s.ws.send(JSON.stringify({ type: 'input', data }));
-            setTimeout(() => this.loadClaudeSessions(), 400);
+            if (this._sendRaw(data)) setTimeout(() => this.loadClaudeSessions(), 400);
+        },
+
+        // An answered question in the history: which options were picked
+        // (by label) and what was typed instead, or null when it was not
+        // answered. Claude Code joins a multi-select's picks with ", ".
+        decisionAnswer(dec, q) {
+            const a = dec.answers && dec.answers[q.question];
+            if (a == null) return null;
+            const labels = new Set(q.options.map(o => o.label));
+            const parts = q.multi ? a.split(', ') : [a];
+            const picked = parts.filter(x => labels.has(x));
+            return { picked, text: picked.length === parts.length ? '' : a };
+        },
+
+        decisionPicked(dec, q, label) {
+            const a = this.decisionAnswer(dec, q);
+            return !!a && a.picked.includes(label);
+        },
+
+        decisionText(dec, q) {
+            const a = this.decisionAnswer(dec, q);
+            return a ? a.text : '';
         },
 
         // An edited file's link in the step summary: open the Diff on it.

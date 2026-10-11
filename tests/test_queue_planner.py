@@ -30,6 +30,7 @@ class _FakeSession:
         self.task_id = task_id
         self.alive = True
         self.hook_waiting = False
+        self.question = None
 
 
 @pytest.fixture

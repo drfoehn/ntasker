@@ -82,14 +82,41 @@ def test_running_turn_has_progress_and_pending_call():
     assert last["pending"] == {"name": "Bash", "kind": "bash", "detail": "rm -rf build", "file": None}
 
 
+ASK = {"questions": [{"question": "Which?", "header": "Pick", "multiSelect": False,
+                      "options": [{"label": "A", "description": "first"}, {"label": "B"}]}]}
+ASK_ENTRY = [{"question": "Which?", "header": "Pick", "multi": False,
+              "options": [{"label": "A", "description": "first"}, {"label": "B", "description": ""}]}]
+
+
 def test_pending_question_carries_its_options():
-    ask = {"questions": [{"question": "Which?", "multiSelect": False,
-                          "options": [{"label": "A", "description": ""}, {"label": "B"}]}]}
     turns = parse_transcript([_ev("user", "go"),
                               _ev("assistant", [{"type": "tool_use", "id": "q", "name": "AskUserQuestion",
-                                                 "input": ask}], id="m")])
+                                                 "input": ASK}], id="m")])
     assert turns[0]["pending"]["kind"] == "ask"
-    assert turns[0]["pending"]["questions"] == [{"question": "Which?", "options": ["A", "B"], "multi": False}]
+    assert turns[0]["pending"]["questions"] == ASK_ENTRY
+    assert turns[0]["pending"]["answers"] is None
+
+
+def test_answered_question_carries_the_answers():
+    turns = parse_transcript([
+        _ev("user", "go"),
+        _ev("assistant", [{"type": "tool_use", "id": "q", "name": "AskUserQuestion", "input": ASK}], id="m"),
+        _ev("user", [{"type": "tool_result", "tool_use_id": "q", "content": "The user answered: ..."}],
+            toolUseResult={**ASK, "answers": {"Which?": "B"}, "annotations": {}}),
+        _ev("assistant", [{"type": "text", "text": "B it is."}], id="m2", stop_reason="end_turn"),
+    ])
+    ask = turns[0]["tools"][0]
+    assert ask["questions"] == ASK_ENTRY and ask["answers"] == {"Which?": "B"}
+    assert turns[0]["pending"] is None and turns[0]["answer"] == "B it is."
+
+
+def test_cancelled_question_has_no_answers():
+    turns = parse_transcript([
+        _ev("user", "go"),
+        _ev("assistant", [{"type": "tool_use", "id": "q", "name": "AskUserQuestion", "input": ASK}], id="m"),
+        _ev("user", [{"type": "tool_result", "tool_use_id": "q", "content": "cancelled", "is_error": True}]),
+    ])
+    assert turns[0]["tools"][0]["answers"] is None
 
 
 def test_parse_cuts_configured_run_rules():
@@ -204,6 +231,18 @@ def test_api_conversation(client):
     assert d["available"] is True and len(d["turns"]) == 3 and d["updated"]
     assert d["usage"]["input"] > 0
     assert client.get("/api/tasks/9999/conversation").status_code == 404
+
+
+def test_api_session_question(client, monkeypatch):
+    tid = client.post("/api/tasks", json={"title": "t", "agent": "claude"}).json()["id"]
+    assert client.post(f"/api/claude/sessions/{tid}/question", json={"id": "q", "questions": ASK["questions"]}).status_code == 404
+    monkeypatch.setattr("ntasker.app.set_question", lambda task_id, q: task_id == tid)
+    assert client.post(f"/api/claude/sessions/{tid}/question", json={"questions": []}).status_code == 400
+    assert client.post(f"/api/claude/sessions/{tid}/question", json={"id": "q", "questions": ASK["questions"]}).status_code == 200
+    monkeypatch.setattr("ntasker.app.session_states", lambda: {tid: "waiting"})
+    monkeypatch.setattr("ntasker.app.open_questions", lambda: {tid: {"id": "q", "questions": ASK_ENTRY}})
+    d = client.get("/api/claude/sessions").json()
+    assert d["questions"] == {str(tid): {"id": "q", "questions": ASK_ENTRY}}
 
 
 def test_api_sessions_reports_activity(client, monkeypatch):

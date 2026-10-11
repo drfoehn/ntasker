@@ -11,6 +11,9 @@
     ],
     "PostToolUse": [
       {"hooks": [{"type": "command", "command": "ntasker hook running"}]}
+    ],
+    "PreToolUse": [
+      {"matcher": "AskUserQuestion", "hooks": [{"type": "command", "command": "ntasker hook ask"}]}
     ]
   }
 }

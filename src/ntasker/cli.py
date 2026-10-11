@@ -1725,6 +1725,29 @@ def cmd_hook_running(args: argparse.Namespace) -> int:
     return _hook_state(False)
 
 
+def cmd_hook_ask(args: argparse.Namespace) -> int:
+    """``PreToolUse`` for ``AskUserQuestion``: hand the questions to the server.
+
+    Claude Code writes the call to its transcript only once it is answered, so
+    the run view cannot read an open question from there -- while the dialog is
+    up, this hook is the only place the questions are known. The server keeps
+    them on the live session (see :func:`ntasker.claude_runner.set_question`)
+    until the next ``running`` hook clears them.
+    """
+    ctx = _hook_context()
+    if ctx is None:
+        return 0
+    task_id, base, payload = ctx
+    inp = payload.get("tool_input")
+    questions = inp.get("questions") if isinstance(inp, dict) else None
+    if not isinstance(questions, list):
+        return 0
+    with contextlib.suppress(Exception):
+        _api_call(base, "POST", f"/api/claude/sessions/{task_id}/question",
+                  {"id": payload.get("tool_use_id"), "questions": questions}, 2.0)
+    return 0
+
+
 def _pretooluse_target(payload: dict) -> str | None:
     """The path a tool call is about to write to, or ``None`` when it has none.
 
@@ -2822,6 +2845,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, func in (
         ("waiting", cmd_hook_waiting),
         ("running", cmd_hook_running),
+        ("ask", cmd_hook_ask),
         ("pretooluse", cmd_hook_pretooluse),
         ("session", cmd_hook_session),
     ):

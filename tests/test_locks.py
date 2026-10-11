@@ -28,6 +28,7 @@ def client(tmp_path, monkeypatch):
 
 class _FakeSession:
     alive = True
+    question = None
 
 
 def _live(task_id: int) -> None:

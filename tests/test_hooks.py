@@ -93,6 +93,16 @@ def test_state_hooks_post(monkeypatch, fake_server):
     ]
 
 
+def test_ask_hook_posts_the_questions(monkeypatch, fake_server):
+    calls, _ = fake_server
+    qs = [{"question": "Which?", "options": [{"label": "A"}], "multiSelect": False}]
+    assert _run(monkeypatch, ["ask"], {"tool_name": "AskUserQuestion", "tool_use_id": "q1",
+                                       "tool_input": {"questions": qs}}) == 0
+    assert calls == [("POST", "/api/claude/sessions/7/question", {"id": "q1", "questions": qs})]
+    assert _run(monkeypatch, ["ask"], {"tool_name": "AskUserQuestion", "tool_input": {}}) == 0
+    assert len(calls) == 1   # nothing to report
+
+
 class _Proc:
     pid = os.getpid()
 
@@ -114,6 +124,25 @@ def test_session_states_prefers_hook_flag():
         claude_runner.SESSIONS.clear()
 
 
+def test_open_question_lives_until_the_session_runs_again():
+    claude_runner.SESSIONS.clear()
+    sess = claude_runner.TermSession(task_id=1, proc=_Proc(), master_fd=-1)  # type: ignore[arg-type]
+    claude_runner.SESSIONS[1] = sess
+    try:
+        sess.hook_waiting = False
+        q = {"id": "q", "questions": [{"question": "Which?", "header": "", "options": [], "multi": False}]}
+        assert claude_runner.set_question(1, q) is True
+        assert claude_runner.session_states()[1] == "waiting"   # the dialog is up
+        assert claude_runner.open_questions() == {1: q}
+        claude_runner.set_hook_state(1, True)                    # the permission notification
+        assert claude_runner.open_questions() == {1: q}
+        claude_runner.set_hook_state(1, False)                   # answered: PostToolUse
+        assert claude_runner.open_questions() == {}
+        assert claude_runner.set_question(99, q) is False
+    finally:
+        claude_runner.SESSIONS.clear()
+
+
 def test_build_spawn_settings_flag(tmp_path):
     set_db_path(tmp_path / "t.db")
     init_db(tmp_path / "t.db")
@@ -129,8 +158,10 @@ def test_hooks_files_exist():
         path = hooks_settings_path(with_locks)
         assert os.path.isfile(path)
         hooks = json.load(open(path))["hooks"]
-        assert {"Stop", "Notification", "UserPromptSubmit", "PostToolUse"} <= set(hooks)
-        assert ("PreToolUse" in hooks) is with_locks
+        assert {"Stop", "Notification", "UserPromptSubmit", "PostToolUse", "PreToolUse"} <= set(hooks)
+        matchers = [h.get("matcher") for h in hooks["PreToolUse"]]
+        assert "AskUserQuestion" in matchers
+        assert any(m and "Edit" in m for m in matchers) is with_locks
 
 
 def test_clean_env_carries_task_markers(monkeypatch):

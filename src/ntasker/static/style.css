@@ -824,6 +824,46 @@ body {
 .claude-conv-tokens {
     cursor: help;
 }
+/* A question's options (the open one and the answered ones): one row per
+   option, the picked ones tinted; the history's rows are not buttons. */
+.claude-conv-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.claude-conv-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--tblr-border-color);
+    border-radius: var(--tblr-border-radius);
+    background: var(--tblr-bg-surface);
+    color: inherit;
+    text-align: left;
+}
+.claude-conv-option > .ti {
+    flex-shrink: 0;
+    margin-top: 0.15rem;
+    color: var(--tblr-secondary);
+}
+.claude-conv-option-text {
+    min-width: 0;
+}
+.claude-conv-option:not(.is-static):hover {
+    border-color: var(--tblr-orange);
+}
+.claude-conv-option.is-picked {
+    border-color: var(--tblr-orange);
+    background-color: var(--tblr-orange-lt);
+}
+.claude-conv-option.is-picked > .ti {
+    color: var(--tblr-orange);
+}
+.claude-conv-option.is-static:not(.is-picked) {
+    color: var(--tblr-secondary);
+}
 /* Board / list: what a running agent is doing right now. */
 .task-activity {
     display: block;

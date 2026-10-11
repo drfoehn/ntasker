@@ -163,19 +163,42 @@ def _tool_detail(block: dict) -> str:
     return ""
 
 
-def _questions(inp: dict) -> list[dict]:
-    """An ``AskUserQuestion`` call's questions as ``{question, options, multi}``."""
+def question_entries(questions) -> list[dict]:
+    """``AskUserQuestion`` questions as ``{question, header, options, multi}``.
+
+    ``options`` are ``{label, description}``; ``multi`` is the tool's
+    ``multiSelect``. Shared by the transcript (the call's input) and the
+    ``ask`` hook (the same input, reported live) so both sides agree.
+    """
     out = []
-    for q in inp.get("questions") or []:
-        if not isinstance(q, dict):
+    for q in questions if isinstance(questions, list) else []:
+        if not isinstance(q, dict) or not str(q.get("question") or "").strip():
             continue
-        opts = [o.get("label", "") for o in q.get("options") or [] if isinstance(o, dict)]
+        opts = [
+            {"label": str(o.get("label") or ""), "description": str(o.get("description") or "")}
+            for o in q.get("options") or [] if isinstance(o, dict) and o.get("label")
+        ]
         out.append({
-            "question": str(q.get("question") or ""),
-            "options": [str(o) for o in opts],
+            "question": str(q.get("question")),
+            "header": str(q.get("header") or ""),
+            "options": opts,
             "multi": bool(q.get("multiSelect")),
         })
     return out
+
+
+def _answers(ev: dict) -> dict | None:
+    """What the user answered an ``AskUserQuestion`` with: ``{question: answer}``.
+
+    Claude Code stores the dialog's outcome as the result event's
+    ``toolUseResult.answers`` (a multi-select joins its picks with ", "). A
+    cancelled dialog has none.
+    """
+    res = ev.get("toolUseResult")
+    answers = res.get("answers") if isinstance(res, dict) else None
+    if not isinstance(answers, dict) or not answers:
+        return None
+    return {str(k): str(v) for k, v in answers.items()}
 
 
 def _tool_entry(block: dict) -> dict:
@@ -192,7 +215,8 @@ def _tool_entry(block: dict) -> dict:
         "file": file if isinstance(file, str) and kind in ("read", "edit") else None,
     }
     if name == "AskUserQuestion":
-        entry["questions"] = _questions(inp)
+        entry["questions"] = question_entries(inp.get("questions"))
+        entry["answers"] = None
     return entry
 
 
@@ -244,9 +268,11 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
     * ``answer`` -- the final text of a finished turn ("" while it runs);
       ``progress`` -- the texts before it (all texts while it runs);
     * ``done`` -- the agent ended the turn (or a later prompt followed);
-    * ``tools`` -- the activity trail, see :func:`_tool_entry`; ``pending`` --
-      the last tool call without a result yet (awaiting permission, a question
-      or just still running), or ``None``;
+    * ``tools`` -- the activity trail, see :func:`_tool_entry`; a question
+      (``AskUserQuestion``) carries its ``questions`` (see
+      :func:`question_entries`) and, once answered, ``answers`` (see
+      :func:`_answers`); ``pending`` -- the last tool call without a result yet
+      (awaiting permission, a question or just still running), or ``None``;
     * ``usage`` -- tokens, see :func:`_add_usage`; ``answer_at`` -- the last
       agent event's timestamp;
     * ``blocker`` -- what keeps the agent from working (usage limit, not logged
@@ -262,6 +288,7 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
     turns: list[dict] = []
     seen_msgs: set[str] = set()
     resolved: set[str] = set()
+    asked: dict[str, dict] = {}
     texts: list[list[str]] = []
     for raw in lines:
         try:
@@ -280,6 +307,8 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
                 for b in content:
                     if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id"):
                         resolved.add(b["tool_use_id"])
+                        if b["tool_use_id"] in asked:
+                            asked[b["tool_use_id"]]["answers"] = _answers(ev)
             if ev.get("isCompactSummary"):
                 continue
             text = _user_text(content)
@@ -323,7 +352,10 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
                 if block.get("type") == "text" and (block.get("text") or "").strip():
                     texts[-1].append(block["text"].strip())
                 elif block.get("type") == "tool_use":
-                    turn["tools"].append(_tool_entry(block))
+                    entry = _tool_entry(block)
+                    turn["tools"].append(entry)
+                    if entry["kind"] == "ask" and entry["id"]:
+                        asked[entry["id"]] = entry
             turn["done"] = msg.get("stop_reason") == "end_turn"
             turn["answer_at"] = ev.get("timestamp") or turn["answer_at"]
     for i, turn in enumerate(turns):

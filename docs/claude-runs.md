@@ -276,11 +276,23 @@ The conversation is read from the agent's own session transcript (`<home>/projec
 Code's format; `AgentSpec.transcript` says whether an agent writes one) and folded into turns: the prompt, the
 agent's final answer, the progress notes and tool calls behind it, and the tokens it used. The queue seed shows as a
 task card with the tracker rules cut off; the report closes the conversation as its result card. While the session
-waits for you, the pane answers for the terminal: a permission dialog gets *Allow* / *Deny*, a single-choice question
-its options, and the reply box sends a prompt -- all of it typed into the PTY exactly as the terminal would. Images
+waits for you, the pane answers for the terminal: a permission dialog gets *Allow* / *Deny*, a question
+(`AskUserQuestion`) its card, and the reply box sends a prompt -- all of it typed into the PTY exactly as the terminal
+would. Images
 pasted (`Ctrl-V`) or dropped onto the reply box wait there as removable thumbnails; *Send* / `Enter` ships them like a
 terminal drop (see above) ahead of the text. The board's running cards show the agent's current step from the same
 source.
+
+**Questions.** A question card shows every question of the dialog with its options (label and description), a
+*Something else* field for a typed answer, and *Send answers*; a multi-select takes several picks, and the only
+question of a single-select dialog is answered by the click itself. The answers are keyed into Claude Code's dialog
+(digits pick, `Tab` moves on, `Enter` submits the review page) -- so answer in one place, not in both. The card does
+not come from the transcript: Claude Code writes an `AskUserQuestion` call to the file only once it is answered, so
+the session's `PreToolUse` hook reports the open question to the server (`ntasker hook ask` ->
+`POST /api/claude/sessions/<id>/question`), which lists it in `GET /api/claude/sessions` as `questions` until the
+next `running` hook (the answer, or a new prompt) clears it. Answered questions stay in the turn as *Decision* blocks
+with the picked options highlighted and a typed answer quoted (from the transcript's `toolUseResult.answers`); a
+cancelled dialog reads *Not answered*.
 
 Parsing (`src/ntasker/transcript.py`) happens on the server per poll (`GET /api/tasks/<id>/conversation`, every
 2.5 s while the pane is on screen); an unchanged file is answered from a small in-process cache keyed on its mtime
@@ -349,7 +361,8 @@ included** -- gated solely by that loopback bind. Keep the bind local (never `0.
 * Frontend: xterm.js + the fit addon, vendored through the CDN/SRI asset manifest in `src/ntasker/assets.py` (no
   build step), driving the terminal in `static/app.js` (`runNext` queues, `_openWhenLive` waits for the session).
 * Endpoints: `GET /api/claude/status` (CLI + PTY available?), `GET /api/claude/sessions` (`{active, waiting, external,
-  projects, titles, activity}`, for the busy / waiting indicators, the run tabs and the cards' current-step line),
+  projects, titles, activity, questions}`, for the busy / waiting indicators, the run tabs, the cards' current-step
+  line and the conversation's question card), `POST /api/claude/sessions/<id>/question` (the `ask` hook's report),
   `GET /api/tasks/<id>/conversation` (the run view's conversation, see above), `POST /api/projects/quick-run`,
   `POST /api/claude/sessions/<id>/external` (the `/task` loader's registration, see above),
   `POST /api/claude/sessions/<id>/adopt` (point a task at a session ntasker did not start),

@@ -434,6 +434,12 @@ class TermSession:
     # (``ntasker hook waiting|running``, see :func:`set_hook_state`). ``None``
     # until the first hook fires -- then the silence heuristic decides.
     hook_waiting: bool | None = None
+    # The question the agent is asking right now (``AskUserQuestion``), as its
+    # ``PreToolUse`` hook reported it: ``{id, questions}`` with the questions
+    # in :func:`ntasker.transcript.question_entries` form. ``None`` while
+    # nothing is asked; cleared by the next ``running`` hook (the tool call
+    # finished, or a new prompt went in).
+    question: dict | None = None
     # The event loop the PTY reader lives on (set by :func:`_attach_reader`).
     # :func:`_stop` may run off-loop (a sync route in the threadpool) and needs
     # it to hand the final teardown back to the loop thread.
@@ -496,7 +502,29 @@ def set_hook_state(task_id: int, waiting: bool) -> bool:
     if sess is None or not sess.alive:
         return False
     sess.hook_waiting = waiting
+    if not waiting:
+        sess.question = None
     return True
+
+
+def set_question(task_id: int, question: dict | None) -> bool:
+    """Record the question a session's ``AskUserQuestion`` hook reported.
+
+    The session is waiting from this moment on -- the dialog is up before the
+    permission notification fires. ``False`` = no live session.
+    """
+    sess = SESSIONS.get(task_id)
+    if sess is None or not sess.alive:
+        return False
+    sess.question = question
+    if question is not None:
+        sess.hook_waiting = True
+    return True
+
+
+def open_questions() -> dict[int, dict]:
+    """The question each live session is asking right now, by task id."""
+    return {tid: s.question for tid, s in SESSIONS.items() if s.alive and s.question}
 
 
 def session_states() -> dict[int, str]:
