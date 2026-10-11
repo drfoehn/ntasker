@@ -642,6 +642,19 @@ def classify(path: Path) -> str:
     return _KIND_BY_SUFFIX.get(path.suffix.lower(), "other")
 
 
+def doc_project(stem: str) -> str:
+    """Project a generated document belongs to, read off its filename.
+
+    Generated files follow ``<project>_<topic>_<date>``, so the project is
+    whatever precedes the first underscore. Returns ``""`` when there is no
+    such prefix -- no underscore at all, or a name that leads with its date.
+    """
+    prefix, sep, _rest = stem.partition("_")
+    if not sep or not prefix or _DATE_RE.fullmatch(prefix):
+        return ""
+    return prefix
+
+
 def scan_docs(docs_dir: str | None) -> dict[str, Any]:
     """List generated documents, newest first.
 
@@ -686,6 +699,7 @@ def scan_docs(docs_dir: str | None) -> dict[str, Any]:
             {
                 "name": entry.name,
                 "stem": entry.stem,
+                "project": doc_project(entry.stem),
                 "path": str(entry),
                 "suffix": entry.suffix.lower().lstrip("."),
                 "kind": kind,
