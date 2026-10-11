@@ -27,6 +27,7 @@ Every command honours the global flags below and resolves the database via the
 | `ntasker queue rm <id...>`  | Take tasks out of the queue                                   |
 | `ntasker queue clear`       | Empty the queue                                               |
 | `ntasker queue start / pause` | Let the queue work through its tasks, or stop starting new ones |
+| `ntasker queue plan <id...>` | Let an agent record the dependencies between these tasks, order them and start the queue |
 | `ntasker config list`       | Show all settings                                             |
 | `ntasker config get <k>`    | Read a setting                                                |
 | `ntasker config set <k> <v>`| Write a setting (validated)                                   |

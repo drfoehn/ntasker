@@ -385,7 +385,8 @@
 <div class="d-flex" style="min-height: 100vh;"
      x-data="tracker(window.__defaultView, window.__claudeOpenTerminal, window.__defaultAgent)"
      x-init="init()"
-     @keydown.window.ctrl.k.prevent="$refs.inbox && $refs.inbox.focus()">
+     @keydown.window.ctrl.k.prevent="$refs.inbox && $refs.inbox.focus()"
+     @keydown.window.escape="planMode && cancelPlanMode()">
 
     {# Sidebar: project + tag filter (full-width checkboxes). Hidden on mobile (<768px). #}
     {# Sticky-positioned aside outside the .page wrapper. Tabler/Bootstrap surface vars #}
@@ -1277,15 +1278,31 @@
                         {# The two queue-wide controls, pushed right as one block #}
                         {# so they stay together whether or not the planner shows. #}
                         <div class="d-flex align-items-center gap-2 ms-auto">
-                            {# Queue planner: an agent session that reads the open #}
-                            {# tasks, sets the run order and switches the queue on. #}
-                            <button type="button" class="btn btn-sm btn-ghost-secondary"
-                                    x-show="claudeAvailable" x-cloak
-                                    @click="planQueue()" :disabled="queuePlanning"
-                                    :title="$i18n('queue_plan_title')">
-                                <i class="ti ti-wand me-1 fs-3"></i>
-                                <span x-text="$i18n('queue_plan')"></span>
-                            </button>
+                            {# Queue planner: "Plan queue" turns on picking; the ticked #}
+                            {# tasks then go to an agent session that records their #}
+                            {# dependencies, sets the run order and switches the queue on. #}
+                            <template x-if="claudeAvailable && !planMode">
+                                <button type="button" class="btn btn-sm btn-ghost-secondary"
+                                        @click="startPlanMode()" :disabled="queuePlanning"
+                                        :title="$i18n('queue_plan_title')">
+                                    <i class="ti ti-wand me-1 fs-3"></i>
+                                    <span x-text="$i18n('queue_plan')"></span>
+                                </button>
+                            </template>
+                            <template x-if="planMode">
+                                <span class="d-flex align-items-center gap-2">
+                                    <span class="text-muted small" x-show="!planSelected.length"
+                                          x-text="$i18n('queue_plan_pick')"></span>
+                                    <button type="button" class="btn btn-sm btn-primary"
+                                            @click="planQueue()" :disabled="queuePlanning || !planSelected.length"
+                                            :title="$i18n('queue_plan_title')">
+                                        <i class="ti ti-wand me-1 fs-3"></i>
+                                        <span x-text="$i18n('queue_plan_n', {n: planSelected.length})"></span>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-ghost-secondary"
+                                            @click="cancelPlanMode()" x-text="$i18n('cancel')"></button>
+                                </span>
+                            </template>
                             {# Solid only when paused with work waiting -- that is the #}
                             {# one state where pressing it changes something visible. #}
                             <button type="button" class="btn btn-sm"
@@ -1525,13 +1542,22 @@
                                         </span>
                                     </div>
                                     <div class="col-auto">
+                                        {# Picking for the planner takes the place of the done box. #}
+                                        <template x-if="planMode">
+                                            <input type="checkbox" class="form-check-input mt-2 plan-pick"
+                                                   :checked="planSelected.includes(task.id)"
+                                                   :disabled="!planSelectable(task)"
+                                                   @change="togglePlanSelect(task)">
+                                        </template>
                                         {# Disabled while blocked: a task with open dependencies #}
                                         {# can't be completed (mirrors the kanban drag guard). #}
-                                        <input type="checkbox" class="form-check-input mt-2"
-                                               :checked="task.status === 'done'"
-                                               :disabled="task.status === 'open' && isBlocked(task)"
-                                               :title="(task.status === 'open' && isBlocked(task)) ? $i18n('blocked_hint') : ''"
-                                               @change="toggleStatus(task)">
+                                        <template x-if="!planMode">
+                                            <input type="checkbox" class="form-check-input mt-2"
+                                                   :checked="task.status === 'done'"
+                                                   :disabled="task.status === 'open' && isBlocked(task)"
+                                                   :title="(task.status === 'open' && isBlocked(task)) ? $i18n('blocked_hint') : ''"
+                                                   @change="toggleStatus(task)">
+                                        </template>
                                     </div>
                                     <div class="col">
                                         <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -1789,6 +1815,14 @@
                                             {# to one word per line once a column turned narrow, and the id badge #}
                                             {# shrank until its text ran into the title. #}
                                             <div class="kanban-card-head">
+                                                {# Picking for the planner (see the list row); a done card gets no box. #}
+                                                <template x-if="planMode && planSelectable(task)">
+                                                    <input type="checkbox" class="form-check-input plan-pick m-0"
+                                                           :checked="planSelected.includes(task.id)"
+                                                           :disabled="!planSelectable(task)"
+                                                           @click.stop
+                                                           @change="togglePlanSelect(task)">
+                                                </template>
                                                 <span class="task-id badge bg-secondary-lt text-secondary font-monospace"
                                                       role="button"
                                                       :title="$i18n('click_to_copy_id', {id: task.id})"

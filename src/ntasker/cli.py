@@ -1298,20 +1298,24 @@ def cmd_queue_pause(args: argparse.Namespace) -> int:
 
 
 def cmd_queue_plan(args: argparse.Namespace) -> int:
-    """Start the queue planner -- an agent session that orders the queue.
+    """Start the queue planner on the given tasks -- an agent session that
+    records their dependencies, orders them and starts the queue.
 
     Server-only: the planner is a live session, which only the running server
-    can spawn. 1 when the server is unreachable or a planner is already up.
+    can spawn. 1 when the server is unreachable, a task cannot be queued or a
+    planner is already up.
     """
     try:
-        status, data = _api_call(_server_base(args), "POST", "/api/queue/plan", {})
+        status, data = _api_call(
+            _server_base(args), "POST", "/api/queue/plan", {"ids": args.task_id}
+        )
     except OSError as exc:
         print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
         return 1
     if status >= 400:
         print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
         return 1
-    print(_("queue planner started -- it orders the queue and switches it on"))
+    print(_("queue planner started -- it plans the tasks and switches the queue on"))
     return 0
 
 
@@ -2679,8 +2683,9 @@ def build_parser() -> argparse.ArgumentParser:
     q_pause.set_defaults(func=cmd_queue_pause)
 
     q_plan = q_sub.add_parser(
-        "plan", help=_("Let an agent order the queue and start it")
+        "plan", help=_("Let an agent plan the given tasks and start the queue")
     )
+    q_plan.add_argument("task_id", type=_task_id, nargs="+")
     # Server to talk to; default NTASKER_URL (set inside spawned sessions).
     q_plan.add_argument("--host", default=None)
     q_plan.add_argument("--port", type=int, default=None)

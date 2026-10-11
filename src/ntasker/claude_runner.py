@@ -290,63 +290,62 @@ def queue_seed_for_task(task: dict) -> str:
 PLANNER_TASK_ID = 0
 
 
-def planner_seed() -> str:
+def planner_seed(ids: list[int]) -> str:
     """Initial input for the queue planner -- the "chef" that orders the queue.
 
-    A session of its own: it reads the open tasks over nTasker's API, decides
-    what should run next per project, PUTs that order and switches the queue
-    on. It never works on a task and never starts a session -- the queue does
-    the executing, and the planner only decides in which order. Its writes are
-    deliberately narrow (the queue, the queue switch, a dependency it can
-    justify); creating, closing, archiving and deleting stay off-limits exactly
+    A session of its own, handed the tasks the user ticked: it works out the
+    dependencies between exactly those, records them on the tasks, derives the
+    run order from them and switches the queue on. It never works on a task and
+    never starts a session -- the queue does the executing. Its writes are
+    deliberately narrow (``depends`` of the given tasks, the queue, the queue
+    switch); creating, closing, archiving and deleting stay off-limits exactly
     as they are for every other agent.
     """
-    return """\
+    id_list = ", ".join(str(i) for i in ids)
+    return f"""\
 # nTasker queue planner
 
-You are nTasker's queue planner. Your whole job is to put the open tasks into a
-sensible run order: you plan, the queue executes. You never work on a task
+You are nTasker's queue planner. The user picked these tasks: {id_list}.
+Your whole job is to work out how they depend on each other and to put them
+into a run order: you plan, the queue executes. You never work on a task
 yourself and you never start a session.
 
 nTasker's API answers on $NTASKER_URL -- curl it, the server is already up.
 
 ## What to do
 
-1. `GET /api/queue` -- the queue as it stands. An entry whose session is live
-   right now has to stay in it, at the head of its project: dropping a running
-   task out of the queue orphans its session.
-2. `GET /api/tasks?status=open&archived=false` -- the candidates. Leave out
-   drafts (`"draft": 1` -- never started by anyone) and blocked tasks (any
-   entry in `depends` with `"done": false`): a blocked task only stalls its
-   lane.
-3. Put them in order. The queue runs **one task per project at a time**, so
-   what matters is the order *within* each project:
-   - `critical` before `high` before `normal` before `low`;
-   - a task others depend on before the tasks waiting for it;
-   - `wip` before `review` before `planned`, then the oldest `created_at`.
-   Do not queue everything you find -- a handful per project, the ones that
-   are genuinely worth doing next.
-4. `PUT /api/queue` with `{"ids": [...]}`, head first, the running entries
-   included. This replaces the whole queue: anything you leave out is dropped.
-5. `PUT /api/settings/queue_enabled` with `{"value": "true"}` so the worker
+1. `GET /api/tasks/<id>` for each of the tasks above: title, description,
+   project, priority and the dependencies it already has (`depends`).
+2. Work out the dependencies **between these tasks**: one needs another's
+   result first when its description builds on what the other produces (a
+   model the other adds, an endpoint the other defines, a refactor the other
+   finishes). Record each one: `PATCH /api/tasks/<id>` with
+   `{{"depends": [<ids>]}}` -- this replaces the whole set, so send the ids
+   that are already there too. The server rejects cycles. Dependencies on
+   tasks outside the set are left as they are.
+3. Order them. The queue runs **one task per project at a time** and never
+   starts a task while one it depends on is open, so what matters is the
+   order *within* each project: a task others depend on first, then
+   `critical` before `high` before `normal` before `low`, then the oldest
+   `created_at`.
+4. `GET /api/queue`, then `PUT /api/queue` with `{{"ids": [...]}}`, head
+   first: the entries already queued stay in front, in their order (an entry
+   whose session is live must keep its place -- dropping it orphans the
+   session), followed by the tasks above in the order you chose. This
+   replaces the whole queue, so include every entry you want to keep.
+5. `PUT /api/settings/queue_enabled` with `{{"value": "true"}}` so the worker
    starts working through it.
 
-Then write your plan out here: per project, the order you chose and a one-line
-reason for it. Stop there and wait -- the user reads it in this session.
-
-## Dependencies
-
-When two task descriptions plainly show that one needs the other's result
-first, you may record it: `PATCH /api/tasks/<id>` with `{"depends": [<ids>]}`
-(this replaces the whole set, so send the ids that are already there too).
-Only with the reason spelled out in your plan, and only when the descriptions
-actually say so -- never on a hunch.
+Then write your plan out here: the dependencies you recorded with a one-line
+reason each, and per project the order you chose. Stop there and wait -- the
+user reads it in this session.
 
 ## What you must not do
 
 - Never create a task, never set one to `done`, never archive or delete one.
   Follow-up work you spot belongs in your plan, not in the tracker.
-- Never change a task's title, description, priority or phase.
+- Never change a task's title, description, priority or phase, and never
+  touch the dependencies of a task that is not in the list above.
 - Never touch a repository: you plan, you do not code.\
 """
 

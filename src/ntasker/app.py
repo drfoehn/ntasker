@@ -538,9 +538,12 @@ def build_js_strings() -> dict[str, str]:
         "queue_empty": _("Empty. Press a task's run button or drop a card here to queue it."),
         "queue_plan": _("Plan queue"),
         "queue_plan_title": _(
-            "Let an agent order the queue: it reads the open tasks, sets the run "
-            "order and starts the queue. It plans only -- the queue does the work."
+            "Pick tasks, then let an agent plan them: it records how they depend "
+            "on each other, sets the run order and starts the queue. It plans "
+            "only -- the queue does the work."
         ),
+        "queue_plan_pick": _("Tick the tasks the planner should order"),
+        "queue_plan_n": _("Plan {n} selected"),
         "queue_plan_started": _("Queue planner started -- watch it in its session."),
         "queue_run_next": _("Run"),
         "queue_start_now": _("Start now -- do not wait for the project to be free"),
@@ -2032,24 +2035,42 @@ def api_queue_start_now(payload: RunIn) -> JSONResponse:
 
 
 @app.post("/api/queue/plan", status_code=201)
-async def api_queue_plan() -> JSONResponse:
-    """Start the queue planner: an agent session that orders the queue.
+async def api_queue_plan(payload: QueueIn) -> JSONResponse:
+    """Start the queue planner on the tasks the user picked.
 
-    The planner is a "chef", not a worker -- it reads the open tasks over this
-    API, PUTs a run order and switches the queue on, and the queue then
-    executes it the way it always does (one session per task, review hand-off).
-    Its session is registered under :data:`PLANNER_TASK_ID`, so it shows up in
-    the run-view tab strip and can be watched or stopped like any other run,
-    but holds no lane and no directory.
+    The planner is a "chef", not a worker -- it reads the given tasks over this
+    API, records the dependencies between them, PUTs a run order and switches
+    the queue on, and the queue then executes it the way it always does (one
+    session per task, review hand-off). Its session is registered under
+    :data:`PLANNER_TASK_ID`, so it shows up in the run-view tab strip and can
+    be watched or stopped like any other run, but holds no lane and no
+    directory.
 
-    409 while a planner is already running, or when the default agent's CLI is
-    not installed. Async on purpose: the spawn registers a PTY reader on the
-    running event loop.
+    400 when ``ids`` is empty or names a task that cannot be queued (done,
+    archived, draft, proposal, missing); 409 while a planner is already
+    running, or when the default agent's CLI is not installed. Async on
+    purpose: the spawn registers a PTY reader on the running event loop.
     """
+    ids = list(dict.fromkeys(payload.ids))
+    if not ids:
+        raise HTTPException(status_code=400, detail=_("Pick at least one task to plan"))
+    marks = ",".join("?" * len(ids))
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT id FROM tasks WHERE id IN ({marks}) AND status = 'open'"
+            " AND archived = 0 AND draft = 0 AND proposed = 0",
+            ids,
+        ).fetchall()
+    bad = sorted(set(ids) - {r["id"] for r in rows})
+    if bad:
+        raise HTTPException(
+            status_code=400,
+            detail=_("Not open tasks: {ids}").format(ids=", ".join(f"#{i}" for i in bad)),
+        )
     available, reason = terminal_available(get_spec(resolve_agent_key(None)))
     if not available:
         raise HTTPException(status_code=409, detail=reason)
-    if not start_detached_session(PLANNER_TASK_ID, planner_seed()):
+    if not start_detached_session(PLANNER_TASK_ID, planner_seed(ids)):
         raise HTTPException(status_code=409, detail=_("The queue planner is already running"))
     return JSONResponse({"id": PLANNER_TASK_ID}, status_code=201)
 

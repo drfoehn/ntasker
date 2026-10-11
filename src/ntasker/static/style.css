@@ -1515,3 +1515,10 @@ h3 + p + .setting-row {
     background: var(--tblr-orange-lt);
     color: var(--tblr-orange);
 }
+
+/* Picking tasks for the queue planner: a ticked row / card is outlined so the
+ * selection reads at a glance across the whole board. */
+.list-group-item:has(.plan-pick:checked),
+.kanban-card:has(.plan-pick:checked) {
+    box-shadow: inset 0 0 0 2px var(--tblr-primary);
+}

@@ -85,24 +85,28 @@ panel's **Running** link opens the terminal later.
 
 ## Planning the queue
 
-You do not have to order the queue by hand. **Plan queue** (the wand button in the panel header, `ntasker queue plan`
-on the CLI) starts a *planner* session: an agent that reads the open tasks over nTasker's own API, decides what should
-run next in each project, `PUT`s that order and switches the queue on. It plans only -- every task is still executed by
-the queue the usual way, in its own session, with the usual review hand-off.
+You do not have to work out the order by hand. **Plan queue** (the wand button in the panel header) turns on picking:
+every open task gets a tick box (in the list it takes the place of the done box), the header counts the ticks, and
+**Plan *n* selected** starts a *planner* session on exactly those tasks -- `ntasker queue plan <id...>` on the CLI.
+The planner is an agent that reads the picked tasks over nTasker's own API, records how they depend on each other,
+`PUT`s a run order and switches the queue on. It plans only -- every task is still executed by the queue the usual
+way, in its own session, with the usual review hand-off. Escape or *Cancel* leaves picking without planning.
 
 The planner's brief (`claude_runner.planner_seed`) is deliberately narrow:
 
-* it reads `GET /api/queue` first and keeps the entries whose session is live at the head of their project -- dropping a
-  running task out of the queue would orphan its session;
-* it reads `GET /api/tasks?status=open&archived=false` and leaves out drafts and tasks blocked by an open dependency;
-* it orders each project by priority, dependency direction, then phase and age, and queues a handful per project rather
-  than everything it finds;
-* it writes `PUT /api/queue` and `PUT /api/settings/queue_enabled`, and may record a dependency (`PATCH
-  /api/tasks/<id>`) when two descriptions plainly call for it -- with the reason spelled out in its plan;
+* it reads each picked task (`GET /api/tasks/<id>`) and nothing else -- the pick is the user's, not the agent's;
+* it works out the dependencies *between* the picked tasks from their descriptions and records them (`PATCH
+  /api/tasks/<id>` with the full `depends` set; the server rejects cycles) -- dependencies on tasks outside the pick
+  stay as they are, and it never touches the dependencies of a task it was not given;
+* it orders each project by dependency direction, then priority and age;
+* it writes `PUT /api/queue` -- the entries already queued stay in front, in their order, the picked tasks follow --
+  and `PUT /api/settings/queue_enabled`;
 * it never creates, closes, archives or deletes a task, never edits a title, description, priority or phase, and never
   touches a repository. Follow-ups it notices go into its plan, not into the tracker.
 
-Then it writes the plan out and stops, so you can read what it decided and why.
+Then it writes the plan out -- each dependency with its reason, the order per project -- and stops, so you can read
+what it decided and why. `POST /api/queue/plan` answers 400 when the pick names a task that cannot be queued (done,
+archived, draft, proposal, missing).
 
 **Only one planner runs at a time** -- a second start is refused with 409. The planner's session is registered under the
 reserved task id `0` (`claude_runner.PLANNER_TASK_ID`): it appears in the run-view tab strip as *Queue planner* and can

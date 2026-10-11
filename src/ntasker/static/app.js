@@ -347,6 +347,11 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // True while the "Plan queue" request is in flight -- the planner is a
         // single session, so the button must not fire twice.
         queuePlanning: false,
+        // Picking the tasks for the planner: while on, every open task shows
+        // a tick box (in place of the done box in the list) and the queue
+        // header carries the "Plan n selected" button. Ids of the ticked tasks.
+        planMode: false,
+        planSelected: [],
         // Lock / dirty reasons per queued task id, from /api/queue ``skipped``
         // ({id: {reason, project, holder}}). Drives the panel's lock badge.
         queueSkipped: {},
@@ -1907,25 +1912,45 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             }
         },
 
-        // Start the queue planner: an agent session that reads the open tasks,
-        // PUTs a run order and switches the queue on. It plans only -- the
-        // queue still executes each task in its own session. Opens its
-        // terminal so the plan is readable while it is written; only one
-        // planner runs at a time (the server answers 409 for a second).
+        // "Plan queue" first turns on picking; Escape or Cancel leaves it.
+        startPlanMode() {
+            this.planMode = true;
+            this.planSelected = [];
+        },
+        cancelPlanMode() {
+            this.planMode = false;
+            this.planSelected = [];
+        },
+        // What the planner can take: an open task that is no draft.
+        planSelectable(task) {
+            return task.status === 'open' && !task.draft && !task.archived;
+        },
+        togglePlanSelect(task) {
+            const i = this.planSelected.indexOf(task.id);
+            if (i >= 0) this.planSelected.splice(i, 1);
+            else this.planSelected.push(task.id);
+        },
+        // Start the queue planner on the ticked tasks: an agent session that
+        // records the dependencies between them, PUTs a run order and switches
+        // the queue on. It plans only -- the queue still executes each task in
+        // its own session. Opens its terminal so the plan is readable while it
+        // is written; only one planner runs at a time (the server answers 409
+        // for a second).
         async planQueue() {
-            if (this.queuePlanning) return;
+            if (this.queuePlanning || !this.planSelected.length) return;
             this.queuePlanning = true;
             try {
                 const r = await fetch('/api/queue/plan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: '{}',
+                    body: JSON.stringify({ ids: this.planSelected }),
                 });
                 const d = await r.json().catch(() => ({}));
                 if (!r.ok) {
                     this.showToast(d.detail || _i('update_failed'), 'danger');
                     return;
                 }
+                this.cancelPlanMode();
                 this.showToast(_i('queue_plan_started'), 'success');
                 this._openWhenLive(d.id);
             } catch (_e) {
