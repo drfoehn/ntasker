@@ -119,6 +119,9 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- With fasttrack: a failed/blocked run leaves the queue instead of
     -- blocking its lane until the user looks at it.
     fail_continue INTEGER NOT NULL DEFAULT 0,
+    -- The git worktree this task's runs work in (NULL = the project
+    -- directory). Several tasks may share one tree. See ntasker.worktrees.
+    worktree_id INTEGER REFERENCES worktrees(id),
     -- Inbox proposal: created by the triage worker from an ``inbox`` row and
     -- awaiting the user's accept. Behaves like a draft everywhere a draft is
     -- refused (never queued/run/``/task``-loaded) and is invisible to every
@@ -170,6 +173,23 @@ CREATE TABLE IF NOT EXISTS run_outcomes (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_run_outcomes_task ON run_outcomes(task_id);
+
+-- Git worktrees tasks run in (see ntasker.worktrees). Path and branch are
+-- derived from the id. ``state``: active | kept | merging | discarding |
+-- merged | discarded; "pending decision" is derived (active, no open task).
+-- Rows stay as history once merged / discarded.
+CREATE TABLE IF NOT EXISTS worktrees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    base_branch TEXT,            -- main checkout's branch at creation; NULL = detached
+    base_sha TEXT,               -- main checkout's HEAD at creation
+    tip_sha TEXT,                -- branch tip at merge / discard (recovery, diff after cleanup)
+    state TEXT NOT NULL DEFAULT 'active',
+    merge_task_id INTEGER,       -- the agent merge run, while / after merging
+    discard_at TEXT,             -- with ``discarding``: when the deferred discard runs
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_at TEXT              -- set with merged / discarded
+);
 
 -- Projects the user has hidden from the sidebar entirely -- discovered
 -- entries reappear on every scan, so "remove" has to be a persisted veto
@@ -354,6 +374,11 @@ def init_db(path: Path | None = None) -> None:
         # handed_off_at column (v3.1) goes. No-op once dropped.
         try:
             conn.execute("ALTER TABLE tasks DROP COLUMN handed_off_at")
+        except sqlite3.OperationalError:
+            pass
+        # v3.14 git worktrees: tasks point at a ``worktrees`` row.
+        try:
+            conn.execute("ALTER TABLE tasks ADD COLUMN worktree_id INTEGER REFERENCES worktrees(id)")
         except sqlite3.OperationalError:
             pass
         # v2.0 phase migration: legacy values `later` and NULL collapse into
@@ -550,6 +575,7 @@ def row_to_task(
         "draft": bool(row["draft"]),
         "fasttrack": bool(row["fasttrack"]),
         "fail_continue": bool(row["fail_continue"]),
+        "worktree_id": row["worktree_id"],
         "proposed": bool(row["proposed"]),
         "triage": json.loads(row["triage"]) if row["triage"] else None,
         "agent": row["agent"],

@@ -328,6 +328,29 @@
                                 <span x-text="$i18n(task.fasttrack ? 'fasttrack_off' : 'fasttrack_on')"></span>
                             </button>
                         </template>
+                        {# Git worktree: a new one, join an open one of the project, or leave it. #}
+                        <template x-if="task.status !== 'done' && task.project && !task.worktree_id">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; newWorktree(task)"
+                                    :title="$i18n('wt_new_hint')">
+                                <i class="ti ti-git-branch me-2"></i><span x-text="$i18n('wt_new')"></span>
+                            </button>
+                        </template>
+                        <template x-for="w in (task.status !== 'done' && task.project ? joinableTrees(task) : [])" :key="w.id">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; setWorktree(task, w.id)">
+                                <i class="ti ti-git-merge me-2"></i>
+                                <span x-text="$i18n('wt_join', {branch: w.branch, tasks: treeTasksLine(w)})"></span>
+                            </button>
+                        </template>
+                        <template x-if="task.status !== 'done' && task.worktree_id">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; setWorktree(task, null)">
+                                <i class="ti ti-folder me-2"></i><span x-text="$i18n('wt_leave')"></span>
+                            </button>
+                        </template>
+                        <template x-if="task.status === 'done' && treeOf(task) && treeOf(task).pending">
+                            <button type="button" class="dropdown-item" @click.stop="open = false; openWorktreeDecision(task.worktree_id)">
+                                <i class="ti ti-git-pull-request me-2"></i><span x-text="$i18n('wt_decide')"></span>
+                            </button>
+                        </template>
                         <template x-if="task.status !== 'done'">
                             <button type="button" class="dropdown-item" @click.stop="open = false; toggleFlag(task, 'draft')"
                                     :title="$i18n('draft_badge')">
@@ -1284,6 +1307,15 @@
                             <span x-text="$i18n('run_log')"></span>
                             <span class="badge bg-secondary-lt ms-1" x-text="outcomes.length"></span>
                         </button>
+                        {# Git worktrees and their end decision (see /api/worktrees). #}
+                        <button type="button" class="btn btn-sm" x-show="worktrees.length" x-cloak
+                                :class="worktreesOpen ? 'btn-secondary' : 'btn-ghost-secondary'"
+                                @click="worktreesOpen = !worktreesOpen" :title="$i18n('wt_list_hint')">
+                            <i class="ti ti-git-branch me-1 fs-3"></i>
+                            <span x-text="$i18n('wt_list')"></span>
+                            <span class="badge ms-1" :class="worktreesPending() ? 'bg-warning text-white' : 'bg-secondary-lt'"
+                                  x-text="worktreesPending() || worktrees.length"></span>
+                        </button>
                         {# Carry on with a conversation started in a terminal. #}
                         <button type="button" class="btn btn-sm btn-ghost-secondary btn-icon"
                                 @click="openSessionPicker()"
@@ -1456,6 +1488,34 @@
                     </ol>
                     </div>
                     </template>
+                    </div>
+
+                    {# ===== Worktrees ===== #}
+                    {# Open git worktrees; a pending one (no open task left) waits for the end decision. #}
+                    <div class="task-queue-outcomes" x-show="worktrees.length && worktreesOpen" x-cloak>
+                        <template x-for="w in worktrees" :key="w.id">
+                            <div class="task-queue-outcome d-flex align-items-center gap-2">
+                                <i class="ti ti-git-branch fs-3 flex-shrink-0"
+                                   :class="w.pending ? 'text-warning' : 'text-secondary'"></i>
+                                <code class="small flex-shrink-0" x-text="w.branch"></code>
+                                <span class="text-secondary text-truncate" x-text="w.project"></span>
+                                <span class="text-secondary small text-truncate flex-fill"
+                                      :title="w.tasks.map(t => `#${t.id} ${t.title}`).join('\n')"
+                                      x-text="treeTasksLine(w)"></span>
+                                <span class="badge flex-shrink-0"
+                                      :class="w.pending ? 'bg-warning-lt' : 'bg-secondary-lt'"
+                                      x-text="$i18n(w.pending ? 'wt_state_pending' : 'wt_state_' + w.state, {id: w.merge_task_id})"></span>
+                                <button type="button" class="btn btn-sm btn-ghost-secondary px-1 py-0 flex-shrink-0"
+                                        x-show="w.state === 'active' || w.state === 'kept'"
+                                        @click="openWorktreeDecision(w.id)" :title="$i18n('wt_decide')" :aria-label="$i18n('wt_decide')">
+                                    <i class="ti ti-git-pull-request fs-3"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-ghost-secondary px-1 py-0 flex-shrink-0"
+                                        x-show="w.state === 'discarding'" @click="undoDiscard(w.id)" :title="$i18n('undo')" :aria-label="$i18n('undo')">
+                                    <i class="ti ti-arrow-back-up fs-3"></i>
+                                </button>
+                            </div>
+                        </template>
                     </div>
 
                     {# ===== Run log ===== #}
@@ -1722,6 +1782,11 @@
                                                     <i class="ti ti-pencil me-1"></i>{{ t('Draft') }}
                                                 </span>
                                             </template>
+                                            <template x-if="task.worktree_id">
+                                                <span class="badge bg-purple-lt" :title="$i18n('wt_badge')">
+                                                    <i class="ti ti-git-branch me-1"></i><span x-text="`ntasker/${task.worktree_id}`"></span>
+                                                </span>
+                                            </template>
                                             <template x-if="task.fasttrack">
                                                 <span class="badge bg-teal-lt" :title="$i18n('fasttrack_badge')">
                                                     <i class="ti ti-bolt me-1"></i>{{ t('Fasttrack') }}
@@ -1927,6 +1992,11 @@
                                                 <template x-if="task.draft">
                                                     <span class="badge bg-secondary-lt" :title="$i18n('draft_badge')">
                                                         <i class="ti ti-pencil me-1"></i>{{ t('Draft') }}
+                                                    </span>
+                                                </template>
+                                                <template x-if="task.worktree_id">
+                                                    <span class="badge bg-purple-lt" :title="$i18n('wt_badge')">
+                                                        <i class="ti ti-git-branch me-1"></i><span x-text="`ntasker/${task.worktree_id}`"></span>
                                                     </span>
                                                 </template>
                                                 <template x-if="task.fasttrack">
@@ -2505,6 +2575,59 @@
                         {{ t('Close') }}
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    {# Worktree decision -- what happens to a finished git worktree: merge, keep or discard. #}
+    <div class="modal modal-blur fade" tabindex="-1" x-show="wtDecision" x-cloak
+         :class="wtDecision ? 'show d-block' : ''"
+         :style="wtDecision ? 'background-color: rgba(0,0,0,0.4)' : ''"
+         @keydown.escape.window="wtDecision = null">
+        <div class="modal-dialog" role="document" x-show="wtDecision" @click.outside="wtDecision = null">
+            <div class="modal-content" x-show="wtDecision">
+                <template x-if="wtDecision">
+                <div>
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="ti ti-git-branch me-1"></i>
+                        <span x-text="$i18n('wt_decision_title')"></span>
+                        <code class="ms-1" x-text="wtDecision.branch"></code>
+                    </h5>
+                    <button type="button" class="btn-close" @click="wtDecision = null" :aria-label="$i18n('close')"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-secondary small mb-2"
+                         x-text="$i18n('wt_decision_facts', {project: wtDecision.project, base: wtDecision.base_branch || '?', commits: wtDecision.facts.commits})"></div>
+                    <div class="text-warning small mb-2" x-show="wtDecision.facts.dirty">
+                        <i class="ti ti-alert-triangle me-1"></i><span x-text="$i18n('wt_decision_dirty')"></span>
+                    </div>
+                    <ul class="list-unstyled small mb-0">
+                        <template x-for="t in wtDecision.tasks" :key="t.id">
+                            <li>
+                                <i class="ti me-1" :class="t.status === 'done' ? 'ti-check text-success' : 'ti-circle text-secondary'"></i>
+                                <span class="font-monospace" x-text="`#${t.id}`"></span> <span x-text="t.title"></span>
+                            </li>
+                        </template>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-ghost-danger me-auto" :disabled="wtBusy"
+                            @click="decideWorktree('discard')">
+                        <i class="ti ti-trash me-1"></i><span x-text="$i18n('wt_discard')"></span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-ghost-secondary" :disabled="wtBusy"
+                            x-show="wtDecision.state === 'active'" @click="decideWorktree('keep')"
+                            :title="$i18n('wt_keep_hint')">
+                        <i class="ti ti-player-pause me-1"></i><span x-text="$i18n('wt_keep')"></span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" :disabled="wtBusy || !wtDecision.facts.commits"
+                            @click="decideWorktree('merge')" :title="$i18n('wt_merge_hint')">
+                        <i class="ti ti-git-merge me-1"></i><span x-text="$i18n('wt_merge')"></span>
+                    </button>
+                </div>
+                </div>
+                </template>
             </div>
         </div>
     </div>

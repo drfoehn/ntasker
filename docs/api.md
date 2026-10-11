@@ -32,6 +32,9 @@ Interactive OpenAPI docs: <http://127.0.0.1:8766/api/docs>
 | POST | `/api/tasks` | `{project?, title, description?, phase?, priority?, tags?}` |
 | PATCH | `/api/tasks/{id}` | Any subset of `{title, description, project, phase, priority, status, archived, tags}` -- `tags` is a **full replace** |
 | DELETE | `/api/tasks/{id}` | Hard delete (the UI archives by default) |
+| POST | `/api/tasks/{id}/worktree` | Put the task into a new git worktree; `worktree_id` on create/patch joins one ([worktrees.md](worktrees.md)) |
+| GET | `/api/worktrees[/{id}]` | Open git worktrees, pending decisions first; one with `facts` ([worktrees.md](worktrees.md#api)) |
+| POST | `/api/worktrees/{id}/merge\|keep\|discard\|undo` | The end decision of a worktree ([worktrees.md](worktrees.md#the-end-decision)) |
 | GET | `/api/settings` | List all settings rows |
 | GET | `/api/settings/{key}` | Single setting or 404 |
 | PUT | `/api/settings/{key}` | `{value: "..."}` -- 200 on accept, 400 if a registered validator rejects |

@@ -308,6 +308,15 @@ commit, changed files (derived from the run's diff), follow-up suggestions.
 A downstream task's seed lists the latest outcome of each task it depends
 on -- that is how queued work chains. Never run anything after `finish`.
 
+### 6.3 Worktree runs (since v3.14)
+
+A task with a `worktree_id` runs in a git worktree of its project on branch
+`ntasker/<id>` -- possibly shared with other tasks (the seed's *Workspace*
+section names them). Commit on that branch only: no checkout of other
+branches, no merge, no push. Whether the branch is merged, kept or discarded
+is the user's decision once the worktree's tasks are done (`ntasker worktree
+...` is the user's tool, not the agent's).
+
 ### 6.1 Directory locks (since v3.1)
 
 A run holds its own project's directory. Work that must touch **another
@@ -417,6 +426,7 @@ agent's own idea -- and never on the task you are currently working on.
 | `triage` | TEXT NULL | JSON: the inbox triage's output + the raw note; NULL for hand-made tasks |
 | `fasttrack` | INT | 0/1 -- the agent commits and finishes the task itself (`ntasker finish`), see 6.2 |
 | `fail_continue` | INT | 0/1 -- with fasttrack: a failed run leaves the queue instead of blocking its lane |
+| `worktree_id` | INT NULL | the git worktree the task's runs work in (branch `ntasker/<id>`), see 6.3; NULL = project dir |
 | `agent` | TEXT NULL | `claude` / `opencode` / `pi`; NULL = the `default_agent` setting |
 | `model` | TEXT NULL | model for this task's sessions (`--model`); NULL = the agent's `<key>_model` setting |
 | tags | n:m | via `tags` + `task_tags` tables |

@@ -35,6 +35,7 @@ from pathlib import Path
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from ntasker import worktrees
 from ntasker.agents import AgentSpec, agent_available, get_spec, resolve_agent_key
 
 try:  # POSIX-only PTY machinery
@@ -94,15 +95,15 @@ class DraftTaskError(RuntimeError):
 
 
 def _task_row(task_id: int):
-    """The task's ``agent``/``model``/``project``/``draft``/``proposed`` columns,
-    or ``None`` (missing / DB hiccup)."""
+    """The task's ``agent``/``model``/``project``/``draft``/``proposed``/``worktree_id``
+    columns, or ``None`` (missing / DB hiccup)."""
 
     from ntasker.db import get_conn  # noqa: PLC0415
 
     try:
         with get_conn() as conn:
             return conn.execute(
-                "SELECT agent, model, project, draft, proposed FROM tasks WHERE id = ?",
+                "SELECT agent, model, project, draft, proposed, worktree_id FROM tasks WHERE id = ?",
                 (task_id,),
             ).fetchone()
     except Exception:  # noqa: BLE001 -- a DB hiccup must not crash the spawn path
@@ -266,6 +267,8 @@ def queue_seed_for_task(task: dict) -> str:
     from ntasker import plugins  # noqa: PLC0415 -- lazy: avoid cycle
 
     lines += plugins.run_briefings(int(task["id"]))
+    if task.get("worktree_id"):
+        lines += _workspace_section(int(task["id"]), int(task["worktree_id"]))
     from ntasker.settings import get_fasttrack_rules, get_run_rules  # noqa: PLC0415 -- lazy: avoid cycle
 
     agent = resolve_agent_key(task.get("agent"))
@@ -274,6 +277,38 @@ def queue_seed_for_task(task: dict) -> str:
     if task.get("fasttrack"):
         lines += ["", get_fasttrack_rules(agent).replace("{id}", task_id)]
     return "\n".join(lines)
+
+
+def _workspace_section(task_id: int, wt_id: int) -> list[str]:
+    """The seed's ``## Workspace`` part for a task in a git worktree: branch,
+    the tree's other tasks, and the rules (commit on the branch only)."""
+    from ntasker.db import get_conn  # noqa: PLC0415 -- lazy: avoid cycle
+
+    try:
+        with get_conn() as conn:
+            tree = worktrees.get(conn, wt_id)
+            others = conn.execute(
+                "SELECT id, title, status FROM tasks WHERE worktree_id = ? AND id != ? ORDER BY id",
+                (wt_id, task_id),
+            ).fetchall()
+    except Exception:  # noqa: BLE001 -- nice-to-have, never block a spawn
+        tree, others = None, []
+    branch = worktrees.branch_name(wt_id)
+    lines = [
+        "",
+        "## Workspace",
+        "",
+        f"This run works in a git worktree of the project on branch `{branch}`, not in the "
+        "project directory itself. Stay in it and commit on this branch only -- no checkout "
+        "of other branches, no merge, no push. Whether the branch gets merged is decided by "
+        "the user once the worktree's work is finished.",
+    ]
+    if others:
+        lines += ["", "Other tasks working on this branch:"]
+        lines += [f"- #{o['id']} {o['title']} ({o['status']})" for o in others]
+        if tree is not None and tree["base_sha"]:
+            lines += ["", f"Their commits so far: `git log {tree['base_sha'][:12]}..HEAD`."]
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -663,6 +698,17 @@ def _start_session(
 
     spec = get_spec(resolve_agent_key(row["agent"] if row else None))
     cwd = default_cwd_for_project(row["project"] if row else None)
+    if row is not None and row["worktree_id"]:
+        # The tree's checkout. A failure raises WorktreeError: running in the
+        # shared project directory instead would break the isolation the queue
+        # relied on when it started this task.
+        from ntasker.db import get_conn  # noqa: PLC0415 -- lazy: avoid cycle
+
+        with get_conn() as conn:
+            tree = worktrees.get(conn, row["worktree_id"])
+        if tree is None:
+            raise worktrees.WorktreeError(f"worktree {row['worktree_id']} not found")
+        cwd = worktrees.ensure(tree)
     # ntasker's Claude Code hooks (explicit waiting/running state, and the
     # directory-lock guard when dir_locks is on). Only agents with a settings
     # flag get the file; build_spawn ignores it otherwise.
@@ -739,6 +785,8 @@ def start_detached_session(
     :func:`quick_run_system_prompt`); ``resume`` reopens the task's stored
     session instead of seeding a fresh one, and leaves the phase untouched.
     Returns ``False`` when the task already has a live session, or is a draft.
+    Raises :class:`~ntasker.worktrees.WorktreeError` when the checkout of the
+    task's worktree cannot be provided.
 
     Must be called from the event loop: the PTY reader is registered on the
     running loop (see :func:`_attach_reader`).

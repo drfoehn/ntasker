@@ -67,7 +67,7 @@ from ntasker.db import (
 from ntasker.i18n import _, resolve_for_cli, set_active_language
 from ntasker.middleware import ALLOWED_HOSTS_ENV, LOOPBACK_HOSTS
 from ntasker.paths import resolve_db_path, warn_if_missing
-from ntasker import locks, taskqueue
+from ntasker import locks, taskqueue, worktrees
 from ntasker.settings import (
     delete_setting,
     get_setting_raw,
@@ -132,6 +132,8 @@ def _print_task_detail(t: dict) -> None:
     print(f"  {_('Draft'):<14}{bool(t.get('draft'))}")
     fasttrack = bool(t.get("fasttrack"))
     print(f"  {_('Fasttrack'):<14}{fasttrack}{' (fail-continue)' if fasttrack and t.get('fail_continue') else ''}")
+    if t.get("worktree_id"):
+        print(f"  {_('Worktree'):<14}{worktrees.branch_name(t['worktree_id'])}")
     print(f"  {_('Created'):<14}{t.get('created_at') or '-'}")
     if t.get("completed_at"):
         print(f"  {_('Completed'):<14}{t['completed_at']}")
@@ -687,6 +689,11 @@ def cmd_add(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+    try:
+        wt_arg = _parse_worktree(args.worktree)
+    except ValueError:
+        print(_("ntasker: --worktree takes new, a worktree id or none"), file=sys.stderr)
+        return 2
     with get_conn() as conn:
         # Check dependency targets exist *before* inserting, so a bad
         # reference aborts cleanly without leaving an orphan task. A brand-new
@@ -722,6 +729,9 @@ def cmd_add(args: argparse.Namespace) -> int:
             set_task_tags(conn, new_id, norm_tags)
         if dep_ids:
             set_task_deps(conn, new_id, dep_ids)
+        if wt_arg is not None and not _attach_worktree(conn, new_id, args.project, wt_arg):
+            conn.rollback()
+            return 2
     print(_("#{id} created: {title}").format(id=new_id, title=title_value))
     return 0
 
@@ -913,6 +923,11 @@ def cmd_patch(args: argparse.Namespace) -> int:
         fields["fasttrack"] = 1 if args.fasttrack else 0
     if args.fail_continue is not None:
         fields["fail_continue"] = 1 if args.fail_continue else 0
+    try:
+        wt_arg = _parse_worktree(args.worktree)
+    except ValueError:
+        print(_("ntasker: --worktree takes new, a worktree id or none"), file=sys.stderr)
+        return 2
     if args.locks is not None:
         fields["locks"] = _parse_locks(args.locks)   # normalised below, once the project is known
     if args.report is not None:
@@ -938,20 +953,29 @@ def cmd_patch(args: argparse.Namespace) -> int:
         )
         return 2
 
-    if not fields and dep_ids is None:
+    if not fields and dep_ids is None and wt_arg is None:
         print(_("ntasker: nothing to change (specify at least one field)"), file=sys.stderr)
         return 2
 
     with get_conn() as conn:
         exists = conn.execute(
-            "SELECT project FROM tasks WHERE id = ?", (args.task_id,)
+            "SELECT project, worktree_id FROM tasks WHERE id = ?", (args.task_id,)
         ).fetchone()
         if exists is None:
             print(_("ntasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
             return 1
+        own = fields["project"] if "project" in fields else exists["project"]
         if "locks" in fields:
-            own = fields["project"] if "project" in fields else exists["project"]
             fields["locks"] = locks.dump(locks.normalize(fields["locks"], own))
+        if wt_arg is not None and not _attach_worktree(conn, args.task_id, own, wt_arg):
+            conn.rollback()
+            return 2
+        if wt_arg is None and "project" in fields and exists["worktree_id"] is not None:
+            try:
+                worktrees.check_join(conn, own, exists["worktree_id"], join=False)
+            except worktrees.WorktreeError as e:
+                print(f"ntasker: {e}", file=sys.stderr)
+                return 2
 
         if dep_ids is not None:
             dep_ids = normalize_dep_ids(dep_ids)
@@ -969,7 +993,7 @@ def cmd_patch(args: argparse.Namespace) -> int:
                 print(msg, file=sys.stderr)
                 return 2
 
-        changed: list[str] = list(fields.keys())
+        changed: list[str] = list(fields.keys()) + (["worktree_id"] if wt_arg is not None else [])
         if fields:
             set_clause = ", ".join(f"{k} = ?" for k in fields)
             conn.execute(
@@ -985,6 +1009,35 @@ def cmd_patch(args: argparse.Namespace) -> int:
         )
     )
     return 0
+
+
+def _parse_worktree(value: str | None) -> str | int | None:
+    """``--worktree``: ``new``, ``none`` or a worktree id; ``None`` when not given."""
+    if value is None:
+        return None
+    value = value.strip().lower()
+    if value in ("new", "none"):
+        return value
+    return int(value.lstrip("#"))   # ValueError on anything else
+
+
+def _attach_worktree(conn, task_id: int, project: str | None, wt: str | int) -> bool:
+    """Apply ``--worktree`` to a task inside ``conn``; prints the refusal and returns False."""
+    try:
+        if wt == "none":
+            wt_id = None
+        elif wt == "new":
+            wt_id = worktrees.create(conn, project)["id"]
+        else:
+            worktrees.check_join(conn, project, int(wt), join=True)
+            wt_id = int(wt)
+    except worktrees.WorktreeError as e:
+        print(f"ntasker: {e}", file=sys.stderr)
+        return False
+    conn.execute("UPDATE tasks SET worktree_id = ? WHERE id = ?", (wt_id, task_id))
+    if wt == "new":
+        print(_("Worktree {branch} created").format(branch=worktrees.branch_name(wt_id)))
+    return True
 
 
 def cmd_tag_add(args: argparse.Namespace) -> int:
@@ -1482,6 +1535,51 @@ def cmd_lock_rm(args: argparse.Namespace) -> int:
 
 def cmd_lock_list(args: argparse.Namespace) -> int:
     return _lock_request(args, "GET", f"/api/tasks/{args.task_id}", None)
+
+
+def _worktree_request(args: argparse.Namespace, method: str, path: str) -> tuple[int, dict | list]:
+    """One call for ``ntasker worktree``; prints errors, returns ``(rc, body)``."""
+    try:
+        status, data = _api_call(_server_base(args), method, path, None, timeout=60.0)
+    except OSError as exc:
+        print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+        return 1, {}
+    if status >= 400:
+        print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
+        return 1, data
+    return 0, data
+
+
+def cmd_worktree_list(args: argparse.Namespace) -> int:
+    """The worktrees, pending decisions first (``--all``: merged / discarded too)."""
+    rc, trees = _worktree_request(args, "GET", "/api/worktrees" + ("?all=true" if args.all else ""))
+    if rc:
+        return rc
+    if args.json:
+        print(json.dumps(trees, indent=2, ensure_ascii=False))
+        return 0
+    for w in trees:
+        state = _("pending decision") if w["pending"] else w["state"]
+        tasks = ", ".join(f"#{t['id']}" + ("" if t["status"] == "done" else "*") for t in w["tasks"]) or "-"
+        print(f"{w['id']:>4}  {w['branch']:<14} {w['project']:<24} {state:<18} {tasks}")
+    return 0
+
+
+def cmd_worktree_decide(args: argparse.Namespace) -> int:
+    """``merge`` / ``keep`` / ``discard`` / ``undo`` one worktree."""
+    rc, data = _worktree_request(args, "POST", f"/api/worktrees/{args.worktree_id}/{args.action}")
+    if rc:
+        return rc
+    branch = worktrees.branch_name(args.worktree_id)
+    if data.get("state") == "merging":
+        print(_("{branch}: not mergeable by itself -- merge run #{task} queued").format(
+            branch=branch, task=data["task_id"]))
+    elif data.get("state") == "discarding":
+        print(_("{branch}: discarded in {sec}s -- `ntasker worktree undo {id}` takes it back").format(
+            branch=branch, sec=data["delay"], id=args.worktree_id))
+    else:
+        print(f"{branch}: {data.get('state')}")
+    return 0
 
 
 def cmd_finish(args: argparse.Namespace) -> int:
@@ -2483,6 +2581,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--fail-continue", action="store_true",
         help=_("With --fasttrack: a failed run leaves the queue instead of blocking it."),
     )
+    sp_add.add_argument(
+        "--worktree", metavar="new|ID",
+        help=_("Run in a git worktree: 'new' creates one, an id joins an open one of the project."),
+    )
     sp_add.set_defaults(func=cmd_add)
 
     # in (inbox) ------------------------------------------------------------
@@ -2546,6 +2648,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp_patch.add_argument(
         "--fail-continue", action=argparse.BooleanOptionalAction, default=None,
         help=_("With fasttrack: a failed run leaves the queue instead of blocking it."),
+    )
+    sp_patch.add_argument(
+        "--worktree", metavar="new|ID|none",
+        help=_("Run in a git worktree: 'new' creates one, an id joins one, 'none' leaves it."),
     )
     sp_patch.add_argument(
         "--depends",
@@ -2737,6 +2843,27 @@ def build_parser() -> argparse.ArgumentParser:
         lp.add_argument("--host", default=None)
         lp.add_argument("--port", type=int, default=None)
         lp.set_defaults(func=func)
+
+    # worktree --------------------------------------------------------------
+    sp_wt = sub.add_parser("worktree", help=_("Git worktrees tasks run in, and their end decision"))
+    wt_sub = sp_wt.add_subparsers(dest="worktree_cmd", required=True)
+    wp = wt_sub.add_parser("list", help=_("List worktrees, pending decisions first"))
+    wp.add_argument("--all", action="store_true", help=_("Include merged and discarded ones."))
+    wp.add_argument("--json", action="store_true")
+    wp.add_argument("--host", default=None)
+    wp.add_argument("--port", type=int, default=None)
+    wp.set_defaults(func=cmd_worktree_list)
+    for action, help_text in (
+        ("merge", _("Merge into the main checkout and remove it (an agent run if not clean)")),
+        ("keep", _("Keep it for rework or a follow-up task")),
+        ("discard", _("Remove checkout and branch after a short undo window")),
+        ("undo", _("Take a pending discard back")),
+    ):
+        wp = wt_sub.add_parser(action, help=help_text)
+        wp.add_argument("worktree_id", type=int)
+        wp.add_argument("--host", default=None)
+        wp.add_argument("--port", type=int, default=None)
+        wp.set_defaults(func=cmd_worktree_decide, action=action)
 
     # projects ------------------------------------------------------------
     sp_proj = sub.add_parser("projects", help=_("Claude Code projects"))

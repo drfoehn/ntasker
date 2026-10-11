@@ -6,7 +6,8 @@ spans **several repos**, and a directory that is busy because of a task from *an
 
 ## Model
 
-* A run always holds **its own project's directory**.
+* A run always holds **its own project's directory** -- a task in a git worktree holds that worktree's checkout instead
+  (see [worktrees.md](worktrees.md)).
 * A task may additionally lock other projects' directories: the `locks` field, a list of project names. The own project
   is implicit and never stored there (it is dropped on write).
 * A task without a project holds only its explicit locks.

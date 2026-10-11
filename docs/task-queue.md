@@ -29,6 +29,8 @@ done) applies as usual. Switch it off and a Quicktask queues like any other run.
 
 **Tasks without a project** have no lane. They share no working directory with anything, so any number of them run
 side by side -- each starts on the next tick. Only an explicit directory lock (`--locks`) can still make one wait.
+**Worktrees** are lanes of their own: tasks in one git worktree run one after the other, in parallel to the project's
+ordinary runs and to other worktrees (see [worktrees.md](worktrees.md)).
 
 **Start now** is your override for a single waiting entry: the `⏭` button on the entry (or `ntasker run <id> --now`)
 starts it on the next tick although its project already has a run, a directory it needs is held, or one is git-dirty.

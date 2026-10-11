@@ -64,7 +64,11 @@ usual.
 
 A task **without a project** has no lane at all: it shares no working
 directory with anything, so any number of them run side by side. Only its
-explicit directory locks (``tasks.locks``) can still make it wait.
+explicit directory locks (``tasks.locks``) can still make it wait. The same
+holds for a task in a git **worktree** (``tasks.worktree_id``, see
+:mod:`ntasker.worktrees`): the tree is a lane of its own, so it runs next to
+its project's lane, while two tasks of one tree still run one after the
+other.
 
 **Start now** (:func:`request_start_now`, :data:`FORCE`) is the user's override
 for a single waiting entry: it starts on the next tick although its lane is
@@ -77,8 +81,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import sqlite3
+import sys
 
-from ntasker import locks
+from ntasker import locks, worktrees
 from ntasker.agents import agent_keys, get_spec, resolve_agent_key
 from ntasker.claude_runner import (
     active_session_ids,
@@ -136,10 +141,14 @@ _booted = False
 ENDED_SUMMARY = "session ended without finish"
 
 
-def _bucket(project: str | None) -> str:
-    """Concurrency bucket for a task: its project. ``""`` for a task without
-    one -- which is no lane: such tasks never wait for each other."""
-    return project or ""
+def _bucket(row: sqlite3.Row) -> str:
+    """Concurrency bucket for a task: its project, or ``wt:<id>`` for a task in
+    a git worktree (the tree is a lane of its own, see :mod:`ntasker.worktrees`).
+    ``""`` for a task without a project -- which is no lane: such tasks never
+    wait for each other."""
+    if row["worktree_id"]:
+        return f"wt:{row['worktree_id']}"
+    return row["project"] or ""
 
 
 def load_queue() -> list[sqlite3.Row]:
@@ -342,10 +351,10 @@ def _busy_buckets(live: set[int], conn: sqlite3.Connection) -> set[str]:
         return set()
     placeholders = ",".join("?" * len(live))
     rows = conn.execute(
-        f"SELECT project FROM tasks WHERE id IN ({placeholders}) AND status != 'done'",
+        f"SELECT project, worktree_id FROM tasks WHERE id IN ({placeholders}) AND status != 'done'",
         list(live),
     ).fetchall()
-    return {r["project"] for r in rows if r["project"]}
+    return {b for b in map(_bucket, rows) if b}
 
 
 def _runnable_agents() -> set[str]:
@@ -396,9 +405,7 @@ def _lock_reason(
     git check only runs for a task that passed every cheaper gate, so an idle
     queue costs nothing. Shared by the start decision and :func:`skipped`.
     """
-    own = row["project"]
-    names = [*([own] if own else []), *locks.parse(row["locks"])]
-    by_dir = {locks.resolve_dir(n): n for n in names}
+    by_dir = locks.run_dirs(row)
     hit = locks.conflict(set(by_dir), held, exclude=int(row["id"]))
     if hit is not None:
         return {"reason": "lock", "project": by_dir[hit[0]], "holder": hit[1]}
@@ -469,6 +476,7 @@ def tick() -> None:
     live = set(active_session_ids())
     external = set(external_session_ids())
     _kill_done(live)
+    worktrees.sweep(live | external)
     rows = load_queue()
     queued_ids = {int(r["id"]) for r in rows}
 
@@ -561,9 +569,9 @@ def tick() -> None:
     with get_conn() as conn:
         busy = _busy_buckets(occupied, conn)
         busy |= {
-            r["project"]
+            _bucket(r)
             for r in rows
-            if r["project"]
+            if _bucket(r)
             and r["session_ended_at"]
             and int(r["id"]) not in RESUME
             and int(r["id"]) not in LANELESS
@@ -580,7 +588,7 @@ def tick() -> None:
             # Start now: the user overrides lane, locks and the git check for
             # this one start; the run then occupies them like any other.
             force = task_id in forced
-            bucket = _bucket(row["project"])
+            bucket = _bucket(row)
             if (bucket in busy and not (laneless or force)) or not _startable(
                 row, conn, runnable, default_agent
             ):
@@ -591,7 +599,7 @@ def tick() -> None:
                 resume = task_id in RESUME
                 if not force and _lock_reason(row, held, require_clean and not resume) is not None:
                     continue
-                for d in locks.task_dirs(row["project"], locks.parse(row["locks"])):
+                for d in locks.run_dirs(row):
                     held.setdefault(d, task_id)
             starts.append(task_id)
             if bucket and not laneless:
@@ -605,12 +613,21 @@ def tick() -> None:
             continue
         quick = task_id in QUICK
         resume = task_id in RESUME
-        started = start_detached_session(
-            task_id,
-            None if (quick or resume) else queue_seed_for_task(task),
-            quick=quick,
-            resume=resume,
-        )
+        try:
+            started = start_detached_session(
+                task_id,
+                None if (quick or resume) else queue_seed_for_task(task),
+                quick=quick,
+                resume=resume,
+            )
+        except worktrees.WorktreeError as e:
+            # No checkout, no run: flag the entry ended like a crashed run, so
+            # it waits for the user instead of retrying git every tick.
+            print(f"ntasker: task #{task_id} not started, worktree failed: {e}", file=sys.stderr)
+            with get_conn() as conn:
+                conn.execute("UPDATE tasks SET session_ended_at = ? WHERE id = ?", (_now(), task_id))
+            RESUME.discard(task_id)
+            continue
         if started:
             QUICK.discard(task_id)
             if resume:

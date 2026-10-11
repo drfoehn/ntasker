@@ -27,6 +27,7 @@ Every command honours the global flags below and resolves the database via the
 | `ntasker queue rm <id...>`  | Take tasks out of the queue                                   |
 | `ntasker queue clear`       | Empty the queue                                               |
 | `ntasker queue start / pause` | Let the queue work through its tasks, or stop starting new ones |
+| `ntasker worktree list` / `merge\|keep\|discard\|undo <id>` | Git worktrees and their end decision; `--worktree new\|<id>\|none` on `add`/`patch`, see [worktrees.md](worktrees.md) |
 | `ntasker queue plan <id...>` | Let an agent record the dependencies between these tasks, order them and start the queue |
 | `ntasker config list`       | Show all settings                                             |
 | `ntasker config get <k>`    | Read a setting                                                |

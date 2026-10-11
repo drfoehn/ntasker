@@ -371,6 +371,14 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         outcomes: [],
         outcomesOpen: false,
         _outcomesRaw: null,
+        // Git worktrees tasks run in (/api/worktrees): open ones, pending
+        // decisions first. ``wtDecision`` = the tree in the decision dialog
+        // (with its git facts), null when closed.
+        worktrees: [],
+        worktreesOpen: false,
+        _worktreesRaw: null,
+        wtDecision: null,
+        wtBusy: false,
 
         // ---- Agent registry (Claude / OpenCode / Pi) ----
         // ntasker is agent-agnostic: each task carries an ``agent`` and the run
@@ -589,6 +597,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                 this.loadClaudeSessions(),
                 this.loadQueue(),
                 this.loadOutcomes(),
+                this.loadWorktrees(),
                 this.loadInbox(),
             ]);
             // After loading projects/tags, drop stale entries silently.
@@ -1839,6 +1848,100 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             } catch (_e) { /* leave the last known list */ }
         },
 
+        async loadWorktrees() {
+            try {
+                const r = await fetch('/api/worktrees');
+                if (!r.ok) return;
+                const raw = await r.text();
+                if (raw === this._worktreesRaw) return;
+                this._worktreesRaw = raw;
+                this.worktrees = JSON.parse(raw);
+            } catch (_e) { /* leave the last known list */ }
+        },
+
+        worktreesPending() {
+            return this.worktrees.filter(w => w.pending).length;
+        },
+
+        treeOf(task) {
+            return task.worktree_id ? this.worktrees.find(w => w.id === task.worktree_id) || null : null;
+        },
+
+        // Open trees of the task's project it could join.
+        joinableTrees(task) {
+            return this.worktrees.filter(w => w.project === task.project
+                && (w.state === 'active' || w.state === 'kept') && w.id !== task.worktree_id);
+        },
+
+        treeTasksLine(w) {
+            return w.tasks.map(t => `#${t.id}`).join(', ');
+        },
+
+        async newWorktree(task) {
+            const r = await fetch(`/api/tasks/${task.id}/worktree`, { method: 'POST' });
+            if (!r.ok) this.showToast(await this._errorDetail(r, 'update_failed'), 'danger');
+            await this.refreshAll();
+        },
+
+        // ``wtId`` null = leave the tree (the task runs in the project dir again).
+        async setWorktree(task, wtId) {
+            const r = await this.patch(task.id, { worktree_id: wtId }, true);
+            if (!r.ok) this.showToast(await this._errorDetail(r, 'update_failed'), 'danger');
+            await this.refreshAll();
+        },
+
+        // After a task was closed here: if that left its tree waiting for a
+        // decision, ask now. A task closed elsewhere (CLI, fasttrack) only
+        // lands its tree in the pending list -- no surprise pop-ups.
+        async _afterDone(id) {
+            const task = this.tasks.find(t => t.id === id);
+            if (!task || !task.worktree_id) return;
+            const r = await fetch(`/api/worktrees/${task.worktree_id}`);
+            if (!r.ok) return;
+            const w = await r.json();
+            if (w.pending) this.wtDecision = w;
+        },
+
+        async openWorktreeDecision(wtId) {
+            const r = await fetch(`/api/worktrees/${wtId}`);
+            if (r.ok) this.wtDecision = await r.json();
+        },
+
+        // The end decision: merge / keep / discard. Discard is deferred on the
+        // server and offers Undo for that window -- no "are you sure".
+        async decideWorktree(action) {
+            const w = this.wtDecision;
+            if (!w || this.wtBusy) return;
+            this.wtBusy = true;
+            try {
+                const r = await fetch(`/api/worktrees/${w.id}/${action}`, { method: 'POST' });
+                if (!r.ok) {
+                    this.showToast(await this._errorDetail(r, 'update_failed'), 'danger');
+                    return;
+                }
+                const d = await r.json();
+                this.wtDecision = null;
+                if (d.state === 'merging') {
+                    this.showToast(_i('wt_merge_queued', { branch: w.branch, id: d.task_id }), 'info');
+                } else if (d.state === 'discarding') {
+                    this.showToast(_i('wt_discarding', { branch: w.branch }), 'info', {
+                        label: _i('undo'), ms: d.delay * 1000, run: () => this.undoDiscard(w.id),
+                    });
+                } else {
+                    this.showToast(_i(d.state === 'merged' ? 'wt_merged' : 'wt_kept', { branch: w.branch }));
+                }
+            } finally {
+                this.wtBusy = false;
+                await this.refreshAll();
+            }
+        },
+
+        async undoDiscard(wtId) {
+            const r = await fetch(`/api/worktrees/${wtId}/undo`, { method: 'POST' });
+            if (!r.ok) this.showToast(await this._errorDetail(r, 'update_failed'), 'danger');
+            await this.refreshAll();
+        },
+
         // Acknowledge = delete. No confirmation: the entry is a notification,
         // the report itself stays on the task.
         async ackOutcome(id) {
@@ -2729,6 +2832,9 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             if (!r.ok && !quiet) {
                 this.showToast(_i('update_failed'), 'danger');
             }
+            // Every UI path that closes a task passes here: ask for the end
+            // decision of a tree that is now finished.
+            if (r.ok && body.status === 'done') this._afterDone(id);
             return r;
         },
 
@@ -2741,6 +2847,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                 this.loadPriorities(),
                 this.loadQueue(),
                 this.loadOutcomes(),
+                this.loadWorktrees(),
                 this.loadInbox(),
             ]);
             this.pruneStaleProjectFilter();
@@ -3355,7 +3462,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                 div.querySelector('.d-flex').insertBefore(btn, div.querySelector('.btn-close'));
             }
             container.appendChild(div);
-            setTimeout(() => div.remove(), action ? 8000 : 2500);
+            setTimeout(() => div.remove(), action ? (action.ms || 8000) : 2500);
         },
 
         // ---- Datetime formatting ----

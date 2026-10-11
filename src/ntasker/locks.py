@@ -1,6 +1,7 @@
 """Directory locks -- which working directories a task's run holds.
 
-A run always holds its own project's directory. A task may additionally lock
+A run always holds its own project's directory -- or, for a task in a git
+worktree, that worktree's checkout instead (see :mod:`ntasker.worktrees`). A task may additionally lock
 other projects' directories (``tasks.locks``, a JSON list of project names)
 when its work spans repos. The queue worker (:mod:`ntasker.taskqueue`) refuses
 to start a task while a live session of *another* task holds any of its
@@ -25,6 +26,7 @@ import sqlite3
 import subprocess
 import tempfile
 
+from ntasker import worktrees
 from ntasker.claude_runner import default_cwd_for_project
 
 
@@ -60,13 +62,24 @@ def resolve_dir(project: str) -> str:
     return os.path.realpath(default_cwd_for_project(project) or "")
 
 
-def task_dirs(project: str | None, locks: list[str]) -> set[str]:
-    """Every directory a task's run holds: its own project's plus its locks.
+def run_dirs(row: sqlite3.Row) -> dict[str, str]:
+    """Every directory a task's run holds, mapped to the project name it stands for.
 
-    A task without a project holds only its explicit locks.
+    Its own project's directory plus its locks; a task without a project holds
+    only its explicit locks. A task in a worktree (``tasks.worktree_id``) holds
+    the tree's checkout instead of the project directory (see
+    :mod:`ntasker.worktrees`), so it never collides with a run of the project
+    outside that tree.
     """
-    names = [*([project] if project else []), *locks]
-    return {resolve_dir(n) for n in names}
+    out: dict[str, str] = {}
+    own = row["project"]
+    if own:
+        d = resolve_dir(own)
+        wt_id = row["worktree_id"]
+        out[worktrees.path_for(d, wt_id) if wt_id else d] = own
+    for name in parse(row["locks"]):
+        out.setdefault(resolve_dir(name), name)
+    return out
 
 
 def held_dirs(conn: sqlite3.Connection, live_ids: set[int]) -> dict[str, int]:
@@ -79,13 +92,13 @@ def held_dirs(conn: sqlite3.Connection, live_ids: set[int]) -> dict[str, int]:
         return {}
     placeholders = ",".join("?" * len(live_ids))
     rows = conn.execute(
-        f"SELECT id, project, locks FROM tasks "
+        f"SELECT id, project, locks, worktree_id FROM tasks "
         f"WHERE id IN ({placeholders}) AND status != 'done'",
         list(live_ids),
     ).fetchall()
     held: dict[str, int] = {}
     for row in rows:
-        for d in task_dirs(row["project"], parse(row["locks"])):
+        for d in run_dirs(row):
             held.setdefault(d, int(row["id"]))
     return held
 

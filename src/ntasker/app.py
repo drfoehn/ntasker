@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import functools
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -65,7 +66,7 @@ from ntasker.projects import (
 )
 from ntasker.rundiff import changed_paths, parse_baselines, run_diff
 from ntasker.transcript import conversation_for, last_activity
-from ntasker import completion, locks, plugins, sessions, taskqueue, triage
+from ntasker import completion, locks, plugins, sessions, taskqueue, triage, worktrees
 from ntasker.newproject import created_projects
 from ntasker.newproject import router as newproject_router
 from ntasker import db as _db_module
@@ -255,6 +256,8 @@ class TaskCreate(BaseModel):
     # failed run leave the queue (see ntasker.taskqueue).
     fasttrack: bool = False
     fail_continue: bool = False
+    # Join an existing git worktree of the same project (see ntasker.worktrees).
+    worktree_id: int | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -276,6 +279,7 @@ class TaskUpdate(BaseModel):
     draft: bool | None = None  # True also drops the task from the queue
     fasttrack: bool | None = None
     fail_continue: bool | None = None
+    worktree_id: int | None = None  # join a tree of the same project; null = leave it
     tags: list[str] | None = None  # None = unchanged; [] = clear all
     depends: list[int] | None = None  # None = unchanged; [] = clear all
     # Manual drag&drop position (fractional). None = unchanged. Written as a
@@ -576,6 +580,32 @@ def build_js_strings() -> dict[str, str]:
         "fail_continue_hint": _("A failed fasttrack run leaves the queue instead of blocking it"),
         "fasttrack_on": _("Mark as fasttrack"),
         "fasttrack_off": _("Remove fasttrack"),
+        # Git worktrees (see ntasker.worktrees)
+        "wt_badge": _("Runs in this git worktree, in parallel to the project's other runs"),
+        "wt_new": _("New worktree"),
+        "wt_new_hint": _("Run this task in a git worktree on its own branch, in parallel to other runs"),
+        "wt_join": _("Join {branch} ({tasks})"),
+        "wt_leave": _("Leave worktree"),
+        "wt_decide": _("Decide worktree"),
+        "wt_list": _("Worktrees"),
+        "wt_list_hint": _("Git worktrees -- a finished one waits for your decision"),
+        "wt_state_pending": _("decision pending"),
+        "wt_state_active": _("in use"),
+        "wt_state_kept": _("kept"),
+        "wt_state_merging": _("merging in #{id}"),
+        "wt_state_discarding": _("being discarded"),
+        "wt_decision_title": _("Worktree"),
+        "wt_decision_facts": _("{project} -- {commits} commit(s) on top of {base}"),
+        "wt_decision_dirty": _("Uncommitted changes in the worktree -- discard drops them, merge hands them to an agent"),
+        "wt_merge": _("Merge and remove"),
+        "wt_merge_hint": _("Merge into the project; if that is not clean, an agent run does it"),
+        "wt_keep": _("Keep for now"),
+        "wt_keep_hint": _("For rework or a follow-up task that joins this worktree"),
+        "wt_discard": _("Discard"),
+        "wt_merged": _("{branch} merged and removed"),
+        "wt_kept": _("{branch} kept"),
+        "wt_merge_queued": _("{branch} needs an agent to merge -- task #{id} queued"),
+        "wt_discarding": _("{branch} will be discarded"),
         "draft_on": _("Park as a draft"),
         "draft_off": _("Unpark draft"),
         "run_log": _("Run log"),
@@ -2208,16 +2238,28 @@ def api_locks_check(task: int, path: str) -> JSONResponse:
     that directory right now, if any.
     """
     with get_conn() as conn:
-        row = conn.execute("SELECT project, locks FROM tasks WHERE id = ?", (task,)).fetchone()
+        row = conn.execute(
+            "SELECT id, project, locks, worktree_id FROM tasks WHERE id = ?", (task,)
+        ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=_("Task not found"))
         if not get_dir_locks():
             return JSONResponse({"allowed": True, "project": None, "holder": None})
+        dirs = locks.run_dirs(row)
+        # A worktree task's own checkout lies inside its project's directory,
+        # which it does not hold: its own checkout always passes.
+        target = os.path.realpath(path)
+        if row["worktree_id"] and any(
+            target == d or target.startswith(d + os.sep)
+            for d, name in dirs.items()
+            if name == row["project"]
+        ):
+            return JSONResponse({"allowed": True, "project": row["project"], "holder": None})
         project = locks.project_for_path(conn, path)
         if project is None:
             return JSONResponse({"allowed": True, "project": None, "holder": None})
         target = locks.resolve_dir(project)
-        allowed = target in locks.task_dirs(row["project"], locks.parse(row["locks"]))
+        allowed = target in dirs
         held = locks.held_dirs(conn, _occupied_ids())
     holder = held.get(target)
     return JSONResponse(
@@ -3064,14 +3106,157 @@ def api_task_diff(task_id: int) -> JSONResponse:
     ``{"git": bool, "files": [{dir, path, status, additions, deletions, diff}]}``
     -- each held directory's working tree vs. the commit the run started on,
     untracked files included (see :mod:`ntasker.rundiff`). Outlives the
-    session: the baselines are stored on the task. 404 before the first run.
+    session: the baselines are stored on the task, and for a removed git
+    worktree the branch's commits are read from the main repo. 404 before the
+    first run.
     """
     with get_conn() as conn:
-        row = conn.execute("SELECT run_baselines FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        row = conn.execute(
+            "SELECT run_baselines, worktree_id FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        tree = worktrees.get(conn, row["worktree_id"]) if row and row["worktree_id"] else None
     baselines = parse_baselines(row["run_baselines"]) if row else {}
     if not baselines:
         raise HTTPException(status_code=404, detail=_("This task has not run yet"))
-    return JSONResponse(run_diff(baselines))
+    # A merged / discarded tree's checkout is gone; its commits are still in
+    # the main repo, up to the recorded branch tip.
+    gone = None
+    if tree is not None and tree["tip_sha"]:
+        root = worktrees.repo_root(locks.resolve_dir(tree["project"]))
+        if root:
+            gone = {worktrees.path_for(root, tree["id"]): (root, tree["tip_sha"])}
+    return JSONResponse(run_diff(baselines, gone))
+
+
+@app.post("/api/tasks/{task_id}/worktree", status_code=201)
+def api_task_worktree_new(task_id: int) -> JSONResponse:
+    """Put the task into a new git worktree of its project (see :mod:`ntasker.worktrees`).
+
+    Creates the tree row, its checkout and branch ``ntasker/<id>`` right away
+    and attaches the task. 400 when the project directory is no git repo,
+    409 when the task already is in a tree.
+    """
+    with get_conn() as conn:
+        row = conn.execute("SELECT project, worktree_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=_("Task not found"))
+        if row["worktree_id"] is not None:
+            raise HTTPException(status_code=409, detail=_("The task already is in a worktree"))
+        try:
+            tree = worktrees.create(conn, row["project"])
+        except worktrees.WorktreeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        conn.execute("UPDATE tasks SET worktree_id = ? WHERE id = ?", (tree["id"], task_id))
+        return JSONResponse(worktrees.summary(conn, tree), status_code=201)
+
+
+@app.get("/api/worktrees")
+def api_worktrees(all: bool = False) -> JSONResponse:  # noqa: A002 -- query parameter name
+    """The worktrees, pending decisions first. Without ``all`` only the open
+    ones (active, kept, merging, discarding). No git calls -- polled."""
+    with get_conn() as conn:
+        sql = "SELECT * FROM worktrees"
+        params: list = []
+        if not all:
+            sql += f" WHERE state IN ({','.join('?' * len(worktrees.LISTED_STATES))})"
+            params = list(worktrees.LISTED_STATES)
+        out = [worktrees.summary(conn, r) for r in conn.execute(sql + " ORDER BY id DESC", params)]
+    out.sort(key=lambda w: not w["pending"])
+    return JSONResponse(out)
+
+
+def _worktree_or_404(conn: sqlite3.Connection, wt_id: int) -> sqlite3.Row:
+    tree = worktrees.get(conn, wt_id)
+    if tree is None:
+        raise HTTPException(status_code=404, detail=_("Worktree not found"))
+    return tree
+
+
+@app.get("/api/worktrees/{wt_id}")
+def api_worktree(wt_id: int) -> JSONResponse:
+    """One tree plus ``facts`` (commits on the branch, dirty, checkout present) -- the decision dialog."""
+    with get_conn() as conn:
+        tree = _worktree_or_404(conn, wt_id)
+        out = worktrees.summary(conn, tree)
+    out["facts"] = worktrees.facts(tree)
+    return JSONResponse(out)
+
+
+@app.post("/api/worktrees/{wt_id}/keep")
+def api_worktree_keep(wt_id: int) -> JSONResponse:
+    """Decision *keep*: park the tree for rework or a follow-up task."""
+    with get_conn() as conn:
+        _worktree_or_404(conn, wt_id)
+        try:
+            worktrees.keep(conn, wt_id)
+        except worktrees.WorktreeError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+    return JSONResponse({"state": "kept"})
+
+
+@app.post("/api/worktrees/{wt_id}/discard")
+def api_worktree_discard(wt_id: int) -> JSONResponse:
+    """Decision *discard*: checkout and branch go after ``DISCARD_DELAY`` seconds
+    (the queue worker runs it); ``/undo`` takes it back until then."""
+    with get_conn() as conn:
+        _worktree_or_404(conn, wt_id)
+        try:
+            at = worktrees.discard(conn, wt_id, _occupied_ids())
+        except worktrees.WorktreeError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+    return JSONResponse({"state": "discarding", "discard_at": at, "delay": worktrees.DISCARD_DELAY})
+
+
+@app.post("/api/worktrees/{wt_id}/undo")
+def api_worktree_undo(wt_id: int) -> JSONResponse:
+    """Take a scheduled discard back; the tree is undecided again."""
+    with get_conn() as conn:
+        _worktree_or_404(conn, wt_id)
+        try:
+            worktrees.undo_discard(conn, wt_id)
+        except worktrees.WorktreeError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+    return JSONResponse({"state": "active"})
+
+
+@app.post("/api/worktrees/{wt_id}/merge")
+def api_worktree_merge(wt_id: int) -> JSONResponse:
+    """Decision *merge*: into the main checkout's branch, then checkout and branch go.
+
+    200 ``{"state": "merged"}`` when ntasker could merge by itself. Otherwise
+    (dirty or busy main checkout, dirty tree, conflicts) a fasttrack merge task
+    is created and queued in the project's lane: 202 ``{"state": "merging",
+    "task_id": n}`` -- the queue worker finalises the tree once that task is
+    over. 409 while a task of the tree is open or running, with nothing to
+    merge, or when no agent is available for the merge run.
+    """
+    occupied = _occupied_ids()
+    with get_conn() as conn:
+        tree = _worktree_or_404(conn, wt_id)
+        try:
+            worktrees.merge(conn, wt_id, occupied, locks.held_dirs(conn, occupied))
+            return JSONResponse({"state": "merged"})
+        except worktrees.MergeNotClean as e:
+            reason = str(e)
+        except worktrees.WorktreeError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        available, why = terminal_available(get_spec(resolve_agent_key(None)))
+        if not available:
+            raise HTTPException(status_code=409, detail=why)
+        first = conn.execute(
+            "SELECT title FROM tasks WHERE worktree_id = ? ORDER BY id LIMIT 1", (wt_id,)
+        ).fetchone()
+        title = f"Merge {worktrees.branch_name(wt_id)}" + (f": {first['title']}" if first else "")
+        merge_task = cast(int, conn.execute(
+            """
+            INSERT INTO tasks (project, title, description, fasttrack, fail_continue, sort_order)
+            VALUES (?, ?, ?, 1, 1, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tasks))
+            """,
+            (tree["project"], title[:500], worktrees.merge_job(tree, reason)),
+        ).lastrowid)
+        worktrees.start_merging(conn, wt_id, merge_task)
+    taskqueue.enqueue(merge_task)
+    return JSONResponse({"state": "merging", "task_id": merge_task}, status_code=202)
 
 
 @app.get("/api/tasks/{task_id}/conversation")
@@ -3131,6 +3316,14 @@ def _normalize_model(value: str | None) -> str | None:
     return (value or "").strip() or None
 
 
+def _check_worktree(conn: sqlite3.Connection, project: str | None, wt_id: int, *, join: bool) -> None:
+    """400 unless a task of ``project`` may be in tree ``wt_id`` (see :func:`worktrees.check_join`)."""
+    try:
+        worktrees.check_join(conn, project, wt_id, join=join)
+    except worktrees.WorktreeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/api/tasks", status_code=201)
 def api_create_task(payload: TaskCreate) -> JSONResponse:
     if payload.priority not in PRIORITY_VALID:
@@ -3146,11 +3339,13 @@ def api_create_task(payload: TaskCreate) -> JSONResponse:
     # to run once the row exists (task_context: attachments).
     after_insert = plugins.run_create_hooks(payload.model_dump())
     with get_conn() as conn:
+        if payload.worktree_id is not None:
+            _check_worktree(conn, project_value, payload.worktree_id, join=True)
         cur = conn.execute(
             """
             INSERT INTO tasks (project, title, description, phase, priority, agent,
-                               model, locks, draft, fasttrack, fail_continue, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                               model, locks, draft, fasttrack, fail_continue, worktree_id, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                     (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tasks))
             """,
             (
@@ -3165,6 +3360,7 @@ def api_create_task(payload: TaskCreate) -> JSONResponse:
                 1 if payload.draft else 0,
                 1 if payload.fasttrack else 0,
                 1 if payload.fail_continue else 0,
+                payload.worktree_id,
             ),
         )
         # sqlite3 types lastrowid as ``int | None``; after a successful INSERT
@@ -3239,6 +3435,21 @@ def api_update_task(task_id: int, payload: TaskUpdate) -> JSONResponse:
         fields.update(report_fields(fields["report"]))
 
     with get_conn() as conn:
+        if "worktree_id" in fields or "project" in fields:
+            # Joining needs a tree of the task's project; a task in a tree
+            # cannot move to another project without leaving it first.
+            stored = conn.execute(
+                "SELECT project, worktree_id FROM tasks WHERE id = ?", (task_id,)
+            ).fetchone()
+            if stored is not None:
+                wt_id = fields.get("worktree_id", stored["worktree_id"])
+                if wt_id is not None:
+                    _check_worktree(
+                        conn,
+                        fields.get("project", stored["project"]),
+                        wt_id,
+                        join="worktree_id" in fields and wt_id != stored["worktree_id"],
+                    )
         if "locks" in fields:
             # Normalise against the project the task will have after this
             # update; a lock a live session could not take is refused (409).

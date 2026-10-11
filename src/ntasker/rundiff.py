@@ -97,33 +97,49 @@ def parse_baselines(raw: str | None) -> dict[str, str | None]:
     return data if isinstance(data, dict) else {}
 
 
-def run_diff(baselines: dict[str, str | None]) -> dict:
+def run_diff(
+    baselines: dict[str, str | None], gone: dict[str, tuple[str, str]] | None = None
+) -> dict:
     """The run's changes over all its directories.
 
     ``{"git": bool, "files": [{dir, path, status, additions, deletions, diff}]}``
     -- ``dir`` is the directory's basename (the project), files keep the
     baselines' directory order. ``git`` is false when none of the directories
     is a repository.
+
+    ``gone`` maps a directory that no longer exists -- a removed git worktree
+    -- to ``(repo, tip)``: its changes are then ``base..tip`` read from ``repo``,
+    where the commits still live (see :mod:`ntasker.worktrees`).
     """
     files: list[dict] = []
     any_git = False
     for cwd, base in baselines.items():
-        result = changed_files(cwd, base)
+        if gone and cwd in gone and not os.path.isdir(cwd):
+            result = changed_files(gone[cwd][0], base, tip=gone[cwd][1])
+        else:
+            result = changed_files(cwd, base)
         any_git = any_git or result["git"]
         name = os.path.basename(cwd.rstrip("/")) or cwd
         files.extend({"dir": name, **f} for f in result["files"])
     return {"git": any_git, "files": files}
 
 
-def changed_files(cwd: str, base: str | None) -> dict:
+def changed_files(cwd: str, base: str | None, tip: str | None = None) -> dict:
     """One directory's changes: ``{"git": bool, "files": [{path, status, additions, deletions, diff}]}``.
 
     ``base`` is the sha recorded at spawn (see :func:`baselines_for`); without
     one (a repo with no commits yet) only untracked files can be reported.
+    With ``tip`` the changes are the commits ``base..tip`` -- no working tree.
     """
     if not _is_repo(cwd):
         return {"git": False, "files": []}
     files: list[dict] = []
+    if tip:
+        if base:
+            patch = _git(cwd, "diff", "--find-renames", base, tip, "--") or ""
+            files.extend(_describe(c) for c in _split_patch(patch))
+        files.sort(key=lambda f: f["path"])
+        return {"git": True, "files": files}
     if base:
         patch = _git(cwd, "diff", "--find-renames", base, "--") or ""
         files.extend(_describe(c) for c in _split_patch(patch))
