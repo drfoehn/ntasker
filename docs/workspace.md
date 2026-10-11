@@ -24,6 +24,10 @@ folder may be temporarily absent, and the scanners report `exists: false` instea
 
 - `/workspace` page (topnav grid icon): tabs Skills, Knowledge base, Team, Documents, Tooling (MCP servers from
   `~/.claude.json` with a resolved-or-not runtime verdict; env values are reduced to key names, never shown).
+- Documents tab: files are bundled per project -- the filename prefix before the first underscore
+  (`<project>_<topic>_<date>`); files without one share a "No project" group at the end. Groups are collapsed, a
+  search or type filter opens them all, and they sort by latest document, name or document count (remembered per
+  browser).
 - Sidebar: collapsible sections under the filters, each capped at twelve entries with a "more" link into the page;
   the block appears only once at least one directory exists.
 - Viewer modal (sidebar and task chips): Markdown rendered through marked + DOMPurify, CSV as a table, text as-is;

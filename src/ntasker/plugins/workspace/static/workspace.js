@@ -25,6 +25,11 @@ function workspacePage() {
         q: { skills: '', team: '', docs: '' },
         kindFilter: '',
 
+        // Documents tab: group order (name | count | latest) and which
+        // project groups are expanded.
+        docSort: 'latest',
+        docOpen: {},
+
         viewer: {
             open: false,
             loading: false,
@@ -57,6 +62,10 @@ function workspacePage() {
             // serves known tabs, so the path segment is always valid here.
             this.active = location.pathname.split('/')[2] || 'skills';
             this.$watch('active', (v) => history.replaceState(null, '', '/workspace/' + v));
+            try {
+                const sort = localStorage.getItem('ntasker.ws.docSort');
+                if (['name', 'count', 'latest'].includes(sort)) this.docSort = sort;
+            } catch (e) { /* private mode */ }
             await this.load();
         },
 
@@ -98,6 +107,39 @@ function workspacePage() {
             let docs = this.filtered(this.data.docs.docs, this.q.docs, ['stem', 'name', 'suffix']);
             if (this.kindFilter) docs = docs.filter((d) => d.kind === this.kindFilter);
             return docs;
+        },
+
+        // Documents bundled per project (the filename prefix the scanner
+        // reads off). Spellings that differ only in case are one project;
+        // the newest document's spelling names the group. Files without a
+        // project prefix share one group that always sorts last.
+        docGroups() {
+            const groups = new Map();
+            for (const d of this.visibleDocs()) {   // newest first
+                const key = d.project.toLowerCase();
+                if (!groups.has(key)) {
+                    groups.set(key, { key, name: d.project, docs: [], latest: d.modified });
+                }
+                groups.get(key).docs.push(d);
+            }
+            const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+            const by = {
+                name: byName,
+                count: (a, b) => b.docs.length - a.docs.length || byName(a, b),
+                latest: (a, b) => b.latest - a.latest,
+            }[this.docSort];
+            return [...groups.values()].sort((a, b) => !a.key - !b.key || by(a, b));
+        },
+
+        // A search or type filter opens every group: the matches are what
+        // the user is after, not another click.
+        docGroupOpen(key) {
+            return !!(this.q.docs || this.kindFilter || this.docOpen[key]);
+        },
+
+        setDocSort(value) {
+            this.docSort = value;
+            try { localStorage.setItem('ntasker.ws.docSort', value); } catch (e) { /* private mode */ }
         },
 
         // Notice shown when a section's directory is unset or gone. Returns
