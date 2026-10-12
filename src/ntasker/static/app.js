@@ -588,6 +588,8 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // rows /api/inbox serves -- notes still being triaged (or failed) and
         // the proposals awaiting the user. Off = no field, no inbox list.
         triageEnabled: !!window.__triageEnabled,
+        // Agent reports on (the `reports` setting); off hides the report buttons.
+        reportsEnabled: window.__reportsEnabled !== false,
         inboxText: '',
         inbox: { items: [], tasks: [], summaries: { done: 0, total: 0 } },
 
@@ -4730,7 +4732,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
 
         // Whether the active run has a report to show in the side pane.
         get runReportAvailable() {
-            return !!(this.runReportTask && this.runReportTask.id === this.claudeView && this.runReportTask.report);
+            return !!(this.reportsEnabled && this.runReportTask && this.runReportTask.id === this.claudeView && this.runReportTask.report);
         },
 
         get runReportShown() {

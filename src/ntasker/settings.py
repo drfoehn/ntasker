@@ -194,9 +194,38 @@ RUN_RULES_DEFAULT = """\
 - No new tracker tasks, no deletes, no writes to other task IDs.\
 """
 
+# The run rules when the ``reports`` setting is off: the same hand-off, but no
+# instruction to write a report (saves the tokens of writing one).
+RUN_RULES_NO_REPORT_DEFAULT = """\
+## Tracker rules (queued run)
+
+- The user put this task in nTasker's task queue to have it worked
+  through unattended. Carry it to completion if at all possible.
+- When the work is done, hand over in ONE command, without asking:
+      ntasker finish {id} --status ok --summary "<one line>" \\
+          --next "<follow-up you noticed>"
+  `--next` is optional and repeatable: follow-up work you would
+  suggest. It is only listed for the user -- never create tasks.
+  Then stop and wait. This session stays open; the user reviews the
+  task here and closes it. The next queued task in this project only
+  starts once this task is done -- so never finish on a guess.
+- If the user asks for more after the hand-over, do it, then run the
+  same `ntasker finish {id}` command again with an updated summary.
+- If you cannot finish (blocker, missing info, a decision only the
+  user can make): `ntasker finish {id} --status failed` (or
+  `--status blocked` when the blocker is outside this task) with the
+  reason as summary, then stop. The task keeps its phase.
+- Never set status=done or archive on your own initiative -- only when
+  the user or the task description explicitly tells you to (then:
+  finish, commit if asked, then `ntasker done {id}` as the very last
+  command -- it ends this session and releases the next queued task).
+- No new tracker tasks, no deletes, no writes to other task IDs.\
+"""
+
 RUN_RULES_HINT = _lazy(
     "The tracker rules appended to every queued run's prompt for this agent. "
-    "{id} is replaced by the task id. Reset restores the built-in text."
+    "{id} is replaced by the task id. Reset restores the built-in text, which "
+    "follows the Reports switch; your own text is used as it is."
 )
 RUN_RULES_LABEL = _lazy("Run rules")
 
@@ -219,8 +248,13 @@ def run_rules_key(agent_key: str) -> str:
 
 
 def get_run_rules(agent_key: str) -> str:
-    """The run-rules template for ``agent_key`` (the built-in text when unset)."""
-    return get_setting(run_rules_key(agent_key)) or RUN_RULES_DEFAULT
+    """The run-rules template for ``agent_key``.
+
+    The user's own text when set, else the built-in text matching the
+    ``reports`` setting (see :func:`get_reports`).
+    """
+    default = RUN_RULES_DEFAULT if get_reports() else RUN_RULES_NO_REPORT_DEFAULT
+    return get_setting(run_rules_key(agent_key)) or default
 
 
 # Appended to the seed of a *fasttrack* task, after the run rules. One
@@ -249,10 +283,30 @@ FASTTRACK_RULES_DEFAULT = """\
 - After `ntasker finish` run nothing else.\
 """
 
+# The fasttrack rules when the ``reports`` setting is off (no report on stdin).
+FASTTRACK_RULES_NO_REPORT_DEFAULT = """\
+## Fasttrack (this task finishes itself)
+
+- This is a fasttrack task: nobody reviews it in this session. Decide
+  yourself; never ask a question -- when you genuinely cannot decide,
+  fail instead (below).
+- When everything is done and verified, you are explicitly allowed to
+  commit: stage only your own changes, one commit with a short
+  descriptive message (the project's own rules for messages apply).
+- Then, as the VERY LAST command (it ends this session):
+      ntasker finish {id} --status ok --commit <sha> --summary "<one line>" \\
+          --next "<follow-up>"
+- On a failure or a blocker: do not commit, do not touch other task
+  IDs -- report and stop:
+      ntasker finish {id} --status failed --summary "<what is wrong>"
+  (`--status blocked` when the blocker is outside this task.)
+- After `ntasker finish` run nothing else.\
+"""
+
 FASTTRACK_RULES_HINT = _lazy(
     "Appended to the run rules for fasttrack tasks only: commit permission and the "
     "self-finish via `ntasker finish`. {id} is replaced by the task id. Reset restores "
-    "the built-in text. An unattended fasttrack run still stalls on a permission or "
+    "the built-in text, which follows the Reports switch. An unattended fasttrack run still stalls on a permission or "
     "trust prompt (the session is then flagged waiting) -- set the agent's permission "
     "mode / the project's allow-rules accordingly."
 )
@@ -265,8 +319,13 @@ def fasttrack_rules_key(agent_key: str) -> str:
 
 
 def get_fasttrack_rules(agent_key: str) -> str:
-    """The fasttrack-rules template for ``agent_key`` (the built-in text when unset)."""
-    return get_setting(fasttrack_rules_key(agent_key)) or FASTTRACK_RULES_DEFAULT
+    """The fasttrack-rules template for ``agent_key``.
+
+    The user's own text when set, else the built-in text matching the
+    ``reports`` setting (see :func:`get_reports`).
+    """
+    default = FASTTRACK_RULES_DEFAULT if get_reports() else FASTTRACK_RULES_NO_REPORT_DEFAULT
+    return get_setting(fasttrack_rules_key(agent_key)) or default
 
 
 SIDEBAR_SECTIONS = ("projects", "priority", "phases", "tags", "workspace")
@@ -573,6 +632,7 @@ VALIDATORS: dict[str, Validator] = {
     "claude_permissions": validate_on_off,
     "require_clean": validate_on_off,
     "quicktasks_bypass_lanes": validate_on_off,
+    "reports": validate_on_off,
     "triage_enabled": validate_on_off,
     "triage_model": validate_triage_model,
     "plugins_disabled": validate_plugins_disabled,
@@ -691,6 +751,11 @@ HINTS: dict[str, object] = {
         "directory locks or a clean git state, and does not block them for "
         "other tasks while it runs. Off: a Quicktask queues like any other run."
     ),
+    "reports": _lazy(
+        "Agents write a Markdown report when they hand a queued run over. "
+        "Off: the run prompt no longer asks for one (saves tokens) and the "
+        "report buttons are hidden. Your own run rules are used as they are."
+    ),
     "sidebar_sections": _lazy(
         "Which sidebar sections are folded -- written by the fold buttons in the "
         "sidebar. JSON object {section: true|false}; a missing section is open."
@@ -740,6 +805,7 @@ LABELS: dict[str, object] = {
     "claude_permissions": _lazy("Run ntasker commands without asking"),
     "require_clean": _lazy("Require a clean git state"),
     "quicktasks_bypass_lanes": _lazy("Quicktasks bypass the lanes"),
+    "reports": _lazy("Reports"),
     "update_command": _lazy("Update command"),
     "quick_prompts": _lazy("Quick prompts"),
 }
@@ -781,11 +847,19 @@ FIELD_CHOICES: dict[str, list[tuple[str, object, object]]] = {
         ("on", _lazy("On"), None),
         ("off", _lazy("Off"), None),
     ],
+    "reports": [
+        ("on", _lazy("On"), None),
+        ("off", _lazy("Off"), None),
+    ],
     "triage_enabled": [
         ("on", _lazy("On"), None),
         ("off", _lazy("Off"), None),
     ],
 }
+
+# Run-rules defaults that replace the FIELD_DEFAULTS entry while ``reports``
+# is off (filled per agent at plugin load, see ntasker.plugins).
+FIELD_DEFAULTS_NO_REPORT: dict[str, str] = {}
 
 FIELD_DEFAULTS: dict[str, str] = {
     "assets_mode": "auto",
@@ -797,6 +871,7 @@ FIELD_DEFAULTS: dict[str, str] = {
     "require_clean": "off",
     "quicktasks_bypass_lanes": "on",
     "misc_no_memory": "off",
+    "reports": "on",
     "triage_enabled": "on",
     "triage_model": TRIAGE_MODEL_DEFAULT,
 }
@@ -1122,6 +1197,15 @@ def get_quicktasks_bypass_lanes() -> bool:
     ENV ``NTASKER_QUICKTASKS_BYPASS_LANES``. See :data:`ntasker.taskqueue.LANELESS`.
     """
     return _get_on_off("quicktasks_bypass_lanes", True)
+
+
+def get_reports() -> bool:
+    """Whether queued runs are asked to write a report (default on).
+
+    ENV ``NTASKER_REPORTS``. Off swaps the built-in run / fasttrack rules for
+    their report-free variants and hides the report buttons in the UI.
+    """
+    return _get_on_off("reports", True)
 
 
 def get_misc_project() -> str | None:

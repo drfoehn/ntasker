@@ -264,11 +264,13 @@ def _apply_to_core() -> None:
             settings.HINTS[rules_key] = settings.RUN_RULES_HINT
             settings.LABELS[rules_key] = settings.RUN_RULES_LABEL
             settings.FIELD_DEFAULTS[rules_key] = settings.RUN_RULES_DEFAULT
+            settings.FIELD_DEFAULTS_NO_REPORT[rules_key] = settings.RUN_RULES_NO_REPORT_DEFAULT
             ft_key = settings.fasttrack_rules_key(spec.key)
             settings.VALIDATORS[ft_key] = settings.validate_run_rules
             settings.HINTS[ft_key] = settings.FASTTRACK_RULES_HINT
             settings.LABELS[ft_key] = settings.FASTTRACK_RULES_LABEL
             settings.FIELD_DEFAULTS[ft_key] = settings.FASTTRACK_RULES_DEFAULT
+            settings.FIELD_DEFAULTS_NO_REPORT[ft_key] = settings.FASTTRACK_RULES_NO_REPORT_DEFAULT
         for key, validator, hint, label, suggestions in ctx.settings:
             settings.VALIDATORS[key] = validator
             if hint is not None:

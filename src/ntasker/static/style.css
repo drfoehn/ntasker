@@ -483,7 +483,7 @@ body {
  * lane stays visible instead of hiding behind a horizontal scroll. */
 .task-queue-board {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
     gap: 0.5rem 0.75rem;
     padding-bottom: 0.25rem;
 }
@@ -615,7 +615,7 @@ body {
 }
 .task-queue-title {
     flex: 1 1 auto;
-    min-width: 3rem;
+    min-width: 8rem;
 }
 .task-queue-blocker {
     flex: 0 0 auto;

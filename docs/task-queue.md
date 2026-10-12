@@ -140,6 +140,11 @@ The rules block is editable per agent: *Settings -> Plugins -> <agent> -> Run ru
 e.g. `claude_run_rules`). `{id}` in the text is replaced by the task id. Unset the key (the *Reset to default*
 button, or `ntasker config unset claude_run_rules`) to go back to the built-in text.
 
+Reports are optional: switch off *Settings -> Agents & runs -> Queue -> Reports* (setting `reports`, default `on`) and
+the built-in run and fasttrack rules drop the report -- the agent hands over with `ntasker finish` and a one-line
+summary only, which saves the tokens of writing one. The report buttons (card menu, run log, run view pane) are
+hidden then. Your own edited rules are used as they are.
+
 ## Skipped entries
 
 An entry stays queued but is passed over when

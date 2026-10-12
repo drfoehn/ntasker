@@ -26,6 +26,7 @@ const BOOL_DEFAULTS = {
     require_clean: false,
     quicktasks_bypass_lanes: true,
     misc_no_memory: false,
+    reports: true,
     session_discovery: false,
     claude_permissions: false,
     opencode_auto: false,
@@ -182,9 +183,12 @@ function settingsPage() {
             for (const row of this.rows) byKey[row.key] = row.value;
             // Populate ALL known keys (incl. unset ones) so the bindings have a
             // slot. Unset keys fall back to their effective default so the
-            // matching control shows the value actually in force.
+            // matching control shows the value actually in force. With
+            // reports off, the run rules' built-in text is the report-free one.
+            const reportsOff = !TRUE_STRINGS.includes((byKey['reports'] || 'on').trim().toLowerCase());
+            const defaults = reportsOff ? {...cfg.fieldDefaults, ...cfg.fieldDefaultsNoReport} : cfg.fieldDefaults;
             for (const k of cfg.knownKeys) {
-                this.known[k] = byKey[k] || cfg.fieldDefaults[k] || '';
+                this.known[k] = byKey[k] || defaults[k] || '';
                 this.draft[k] = this.known[k];
             }
             this.prompts = JSON.parse(this.known['quick_prompts'] || '[]');

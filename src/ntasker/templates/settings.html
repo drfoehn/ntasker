@@ -17,6 +17,7 @@
         window.__settings = {
             knownKeys: {{ known_keys | tojson }},
             fieldDefaults: {{ field_defaults | tojson }},
+            fieldDefaultsNoReport: {{ field_defaults_no_report | tojson }},
             fieldChoices: {{ field_choices | tojson }},
             plugins: {{ plugin_cards | tojson }},
             sessionHook: {{ session_hook | tojson }},
@@ -297,6 +298,7 @@
                                 {% call row('dir_locks') %}{{ switch('dir_locks', 'on', 'off') }}{% endcall %}
                                 {% call row('require_clean') %}{{ switch('require_clean', 'on', 'off') }}{% endcall %}
                                 {% call row('quicktasks_bypass_lanes') %}{{ switch('quicktasks_bypass_lanes', 'on', 'off') }}{% endcall %}
+                                {% call row('reports') %}{{ switch('reports', 'on', 'off') }}{% endcall %}
 
                                 <h3 class="mt-4 mb-1">{{ t('Inbox') }}</h3>
                                 <p class="text-secondary small mb-2">{{ t('A raw note becomes a task proposal; you confirm every proposal.') }}</p>

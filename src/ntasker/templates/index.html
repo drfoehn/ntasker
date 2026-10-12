@@ -42,6 +42,8 @@
         window.__quickPrompts = {{ quick_prompts | tojson }};
         // The inbox (the `triage_enabled` setting): topbar field + Inbox list.
         window.__triageEnabled = {{ triage_enabled | tojson }};
+        // Agent reports (the `reports` setting): off hides every report button.
+        window.__reportsEnabled = {{ reports_enabled | tojson }};
         // Names of the enabled plugins; plugin scripts register mixins on
         // window.ntaskerPlugins (merged into tracker() in app.js).
         window.__plugins = {{ plugins_enabled | tojson }};
@@ -304,7 +306,7 @@
                         <i class="ti ti-dots-vertical fs-3"></i>
                     </button>
                     <div class="dropdown-menu" :class="{ show: open }" :style="style" x-cloak>
-                        <template x-if="task.report">
+                        <template x-if="reportsEnabled && task.report">
                             <button type="button" class="dropdown-item" @click.stop="open = false; openReport(task)">
                                 <i class="ti ti-file-text me-2"></i><span x-text="$i18n('report_open')"></span>
                             </button>
@@ -1536,7 +1538,7 @@
                                     <code class="small flex-shrink-0" x-show="o.commit"
                                           x-text="(o.commit || '').slice(0, 7)"></code>
                                     <button type="button" class="btn btn-sm btn-ghost-secondary px-1 py-0 flex-shrink-0"
-                                            x-show="o.report" @click="openReport({id: o.task_id, title: o.title, report: o.report, report_at: o.created_at})"
+                                            x-show="reportsEnabled && o.report" @click="openReport({id: o.task_id, title: o.title, report: o.report, report_at: o.created_at})"
                                             :title="$i18n('report_title')">
                                         <i class="ti ti-file-text fs-3"></i>
                                     </button>

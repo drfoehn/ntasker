@@ -80,6 +80,25 @@ def test_seed_uses_agent_run_rules(db):
     assert "Tracker rules" in queue_seed_for_task(task)
 
 
+def test_seed_without_reports(db, client):
+    from ntasker.settings import delete_setting, set_setting
+
+    task = {"id": 8, "title": "t", "status": "open", "priority": "normal", "agent": "claude", "fasttrack": 1}
+    seed = queue_seed_for_task(task)
+    assert "<<'EOF'" in seed and "report" in seed
+    set_setting("reports", "off")
+    seed = queue_seed_for_task(task)
+    assert "ntasker finish 8 --status ok" in seed
+    assert "<<'EOF'" not in seed and "report (Markdown)" not in seed
+    assert "window.__reportsEnabled = false" in client.get("/").text
+    # The user's own rules are used as they are.
+    set_setting("claude_run_rules", "Custom rules for #{id}.")
+    assert "Custom rules for #8." in queue_seed_for_task(task)
+    delete_setting("reports")
+    delete_setting("claude_run_rules")
+    assert "report (Markdown)" in queue_seed_for_task(task)
+
+
 def test_run_rules_rejects_empty(db):
     from ntasker.settings import set_setting
 
