@@ -91,12 +91,13 @@ shipped as package data in `src/ntasker/claude_assets/hooks/`:
 
 | File | Passed when | Hooks |
 |---|---|---|
-| `base.json` | `dir_locks` off | `Stop`, `Notification` (`permission_prompt`) -> `ntasker hook waiting`; `UserPromptSubmit`, `PostToolUse` -> `ntasker hook running`; `PreToolUse` (`AskUserQuestion`) -> `ntasker hook ask` |
+| `base.json` | `dir_locks` off | `SessionStart` (`clear`) -> `ntasker hook clear`; `Stop`, `Notification` (`permission_prompt`) -> `ntasker hook waiting`; `UserPromptSubmit`, `PostToolUse` -> `ntasker hook running`; `PreToolUse` (`AskUserQuestion`) -> `ntasker hook ask` |
 | `locks.json` | `dir_locks` on | the same, plus `PreToolUse` (`Edit\|Write\|MultiEdit\|NotebookEdit\|Bash`) -> `ntasker hook pretooluse` |
 
 The state hooks give the board an **explicit** waiting / running signal instead of the output-silence heuristic (see
 [claude-runs.md](claude-runs.md#session-indicators----running-vs-waiting)); the `ask` hook hands the agent's open
 question to the conversation pane (see [claude-runs.md](claude-runs.md#the-run-view----conversation-terminal-split)).
+The `clear` hook moves the task to the new session id Claude Code starts on `/clear`.
 The lock hook refuses a tool call whose
 target lies inside another project's directory the task does not hold: exit 2 with
 

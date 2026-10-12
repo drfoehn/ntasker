@@ -1748,6 +1748,25 @@ def cmd_hook_ask(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hook_clear(args: argparse.Namespace) -> int:
+    """``SessionStart`` after ``/clear``: move the task to the new session id.
+
+    ``/clear`` makes Claude Code continue in a fresh session (new id, new
+    transcript); the server rebinds the task so the run view follows it.
+    """
+    ctx = _hook_context()
+    if ctx is None:
+        return 0
+    task_id, base, payload = ctx
+    session = payload.get("session_id")
+    if not session:
+        return 0
+    body = {"session_id": session, "cwd": payload.get("cwd")}
+    with contextlib.suppress(Exception):
+        _api_call(base, "POST", f"/api/claude/sessions/{task_id}/rebind", body, 2.0)
+    return 0
+
+
 def _pretooluse_target(payload: dict) -> str | None:
     """The path a tool call is about to write to, or ``None`` when it has none.
 
@@ -2846,6 +2865,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("waiting", cmd_hook_waiting),
         ("running", cmd_hook_running),
         ("ask", cmd_hook_ask),
+        ("clear", cmd_hook_clear),
         ("pretooluse", cmd_hook_pretooluse),
         ("session", cmd_hook_session),
     ):

@@ -280,8 +280,12 @@ waits for you, the pane answers for the terminal: a permission dialog gets *Allo
 (`AskUserQuestion`) its card, and the reply box sends a prompt -- all of it typed into the PTY exactly as the terminal
 would. Images
 pasted (`Ctrl-V`) or dropped onto the reply box wait there as removable thumbnails; *Send* / `Enter` ships them like a
-terminal drop (see above) ahead of the text. The board's running cards show the agent's current step from the same
-source.
+terminal drop (see above) ahead of the text. The caret next to *Send* offers *Send using fresh context*: it types
+`/clear` first and the reply about 3 s later into the new context (`CLEAR_SETTLE_MS` in `app.js`); the button never
+remembers the choice. `/clear` makes Claude Code continue in a new session id and transcript, so the session's
+`SessionStart` hook (`ntasker hook clear` -> `POST /api/claude/sessions/<id>/rebind`) points the task at it -- the
+pane, the resume button and the activity line follow; this also covers a `/clear` typed in the terminal. The board's
+running cards show the agent's current step from the same source.
 
 **Questions.** A question card shows every question of the dialog with its options (label and description), a
 *Something else* field for a typed answer, and *Send answers*; a multi-select takes several picks, and the only
@@ -363,6 +367,7 @@ included** -- gated solely by that loopback bind. Keep the bind local (never `0.
 * Endpoints: `GET /api/claude/status` (CLI + PTY available?), `GET /api/claude/sessions` (`{active, waiting, external,
   projects, titles, activity, questions}`, for the busy / waiting indicators, the run tabs, the cards' current-step
   line and the conversation's question card), `POST /api/claude/sessions/<id>/question` (the `ask` hook's report),
+  `POST /api/claude/sessions/<id>/rebind` (the `clear` hook: the task's new session after `/clear`),
   `GET /api/tasks/<id>/conversation` (the run view's conversation, see above), `POST /api/projects/quick-run`,
   `POST /api/claude/sessions/<id>/external` (the `/task` loader's registration, see above),
   `POST /api/claude/sessions/<id>/adopt` (point a task at a session ntasker did not start),

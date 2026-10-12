@@ -319,9 +319,22 @@
                           :placeholder="$i18n('conv_reply_placeholder')"
                           @paste="onConvPaste($event)"
                           @keydown.enter="if (!$event.shiftKey && !$event.isComposing) { $event.preventDefault(); sendConvReply(); }"></textarea>
-                <button type="submit" class="btn btn-primary" :disabled="!convReply.trim() && !convImages.length">
-                    <i class="ti ti-send me-1"></i><span x-text="$i18n('conv_send')"></span>
-                </button>
+                {# Split button: plain Send, or (caret) a /clear first. Never remembered. #}
+                <div class="btn-group dropup" x-data="{ sendMenu: false }" @click.outside="sendMenu = false">
+                    <button type="submit" class="btn btn-primary" :disabled="!convReply.trim() && !convImages.length">
+                        <i class="ti ti-send me-1"></i><span x-text="$i18n('conv_send')"></span>
+                    </button>
+                    <button type="button" class="btn btn-primary dropdown-toggle dropdown-toggle-split"
+                            :disabled="!convReply.trim() && !convImages.length"
+                            @click="sendMenu = !sendMenu" :aria-expanded="sendMenu ? 'true' : 'false'"
+                            :aria-label="$i18n('conv_send_options')"></button>
+                    <div class="dropdown-menu dropdown-menu-end" :class="{ show: sendMenu }" x-cloak>
+                        <button type="button" class="dropdown-item" @click="sendMenu = false; sendConvReply(true)"
+                                :title="$i18n('conv_send_fresh_hint')">
+                            <i class="ti ti-eraser me-2"></i><span x-text="$i18n('conv_send_fresh')"></span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </form>
     </template>

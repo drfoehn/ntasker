@@ -2081,29 +2081,29 @@
                     <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
                         <div class="btn-group view-switch" role="group" :aria-label="$i18n('conv_views')">
                             <template x-if="runConvSupported">
-                                <button type="button" class="btn btn-ghost-secondary" :class="runView === 'chat' ? 'active' : ''"
+                                <button type="button" class="btn" :class="runView === 'chat' ? 'active' : ''"
                                         :title="$i18n('conv_show')" @click="showRunView('chat')">
                                     <i class="ti ti-messages me-1 fs-3"></i><span x-text="$i18n('conv_title')"></span>
                                 </button>
                             </template>
                             <template x-if="runConvSupported">
-                                <button type="button" class="btn btn-ghost-secondary" :class="runView === 'split' ? 'active' : ''"
+                                <button type="button" class="btn" :class="runView === 'split' ? 'active' : ''"
                                         :title="$i18n('conv_show_split')" @click="showRunView('split')">
                                     <i class="ti ti-layout-columns me-1 fs-3"></i><span x-text="$i18n('conv_split')"></span>
                                 </button>
                             </template>
-                            <button type="button" class="btn btn-ghost-secondary" :class="runView === 'terminal' ? 'active' : ''"
+                            <button type="button" class="btn" :class="runView === 'terminal' ? 'active' : ''"
                                     :title="$i18n('conv_show_terminal_hint')" @click="showRunView('terminal')">
                                 <i class="ti ti-terminal-2 me-1 fs-3"></i><span x-text="$i18n('conv_terminal')"></span>
                             </button>
-                            <button type="button" class="btn btn-ghost-secondary" :class="runView === 'diff' ? 'active' : ''"
+                            <button type="button" class="btn" :class="runView === 'diff' ? 'active' : ''"
                                     :title="$i18n('diff_open')" @click="showRunView('diff')">
                                 <i class="ti ti-file-diff me-1 fs-3"></i><span x-text="$i18n('diff_title')"></span>
                             </button>
                         </div>
                         {# The report beside the current view -- a toggle independent of the view switch. #}
                         <template x-if="runReportAvailable">
-                            <button type="button" class="btn btn-ghost-secondary" :class="runReportOpen ? 'active' : ''"
+                            <button type="button" class="btn" :class="runReportOpen ? 'active' : ''"
                                     :title="$i18n('conv_report_side')" @click="toggleRunReport()">
                                 <i class="ti ti-layout-sidebar-right me-1 fs-3"></i><span x-text="$i18n('report_title')"></span>
                             </button>

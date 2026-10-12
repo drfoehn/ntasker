@@ -949,6 +949,14 @@ span.task-activity {
     outline: 2px dashed var(--tblr-primary);
     outline-offset: -4px;
 }
+/* The Send button's caret menu opens upwards (no Popper: Alpine toggles it). */
+.conv-reply .dropup .dropdown-menu {
+    top: auto;
+    bottom: 100%;
+    right: 0;
+    left: auto;
+    margin-bottom: 0.25rem;
+}
 .conv-thumb {
     position: relative;
 }

@@ -1,5 +1,8 @@
 {
   "hooks": {
+    "SessionStart": [
+      {"matcher": "clear", "hooks": [{"type": "command", "command": "ntasker hook clear"}]}
+    ],
     "Stop": [
       {"hooks": [{"type": "command", "command": "ntasker hook waiting"}]}
     ],

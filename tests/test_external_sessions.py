@@ -96,3 +96,17 @@ def test_stale_session_cwd_falls_back(client, tmp_path):
         json={"pid": os.getpid(), "session_id": SID, "cwd": str(tmp_path / "gone")},
     )
     assert claude_runner._stored_session(t["id"]) == (SID, None)
+
+
+def test_rebind_points_the_task_at_the_cleared_session(client):
+    from ntasker.db import get_conn
+
+    t = client.post("/api/tasks", json={"title": "t"}).json()
+    sid = "0b6c1f7e-5a3d-4c2b-9e8f-1a2b3c4d5e6f"
+    r = client.post(f"/api/claude/sessions/{t['id']}/rebind", json={"session_id": sid, "cwd": "/p/mine"})
+    assert r.status_code == 200
+    with get_conn() as conn:
+        row = conn.execute("SELECT session_id, session_cwd FROM tasks WHERE id = ?", (t["id"],)).fetchone()
+    assert (row["session_id"], row["session_cwd"]) == (sid, "/p/mine")
+    assert client.post("/api/claude/sessions/9999/rebind", json={"session_id": sid}).status_code == 404
+    assert client.post(f"/api/claude/sessions/{t['id']}/rebind", json={"session_id": "x y"}).status_code == 422

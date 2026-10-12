@@ -672,6 +672,9 @@ def build_js_strings() -> dict[str, str]:
         "conv_collapse_all": _("Collapse all"),
         "conv_reply_placeholder": _("Reply to the agent ... (Enter sends, Shift+Enter new line)"),
         "conv_send": _("Send"),
+        "conv_send_options": _("More send options"),
+        "conv_send_fresh": _("Send using fresh context"),
+        "conv_send_fresh_hint": _("Clear the conversation context first, then send the message into the fresh one"),
         "conv_image_remove": _("Remove image"),
         "conv_views": _("Run views"),
         "conv_terminal": _("Terminal"),
@@ -2001,6 +2004,27 @@ def api_claude_session_question(task_id: int, payload: SessionQuestionIn) -> JSO
         raise HTTPException(status_code=400, detail=_("No question in the payload"))
     if not set_question(task_id, {"id": payload.id, "questions": questions}):
         raise HTTPException(status_code=404, detail=_("No live session for this task"))
+    return JSONResponse({"ok": True})
+
+
+class SessionRebindIn(BaseModel):
+    session_id: str = Field(pattern=SESSION_ID_RE)
+    cwd: str | None = None
+
+
+@app.post("/api/claude/sessions/{task_id}/rebind")
+def api_claude_session_rebind(task_id: int, payload: SessionRebindIn) -> JSONResponse:
+    """Point the task at the session its run continues in after a ``/clear``.
+
+    Called by ``ntasker hook clear`` (``SessionStart`` with source ``clear``):
+    Claude Code starts a new session id -- and transcript -- on ``/clear``, so
+    without this the conversation pane and the resume button would stay on the
+    old one. 404 for an unknown task.
+    """
+    with get_conn() as conn:
+        if conn.execute("SELECT 1 FROM tasks WHERE id = ?", (task_id,)).fetchone() is None:
+            raise HTTPException(status_code=404, detail=_("Task not found"))
+    bind_session(task_id, payload.session_id, payload.cwd or None)
     return JSONResponse({"ok": True})
 
 

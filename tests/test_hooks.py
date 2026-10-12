@@ -103,6 +103,16 @@ def test_ask_hook_posts_the_questions(monkeypatch, fake_server):
     assert len(calls) == 1   # nothing to report
 
 
+def test_clear_hook_rebinds_the_new_session(monkeypatch, fake_server):
+    calls, _ = fake_server
+    sid = "0b6c1f7e-5a3d-4c2b-9e8f-1a2b3c4d5e6f"
+    assert _run(monkeypatch, ["clear"], {"hook_event_name": "SessionStart", "source": "clear",
+                                         "session_id": sid, "cwd": "/p/mine"}) == 0
+    assert calls == [("POST", "/api/claude/sessions/7/rebind", {"session_id": sid, "cwd": "/p/mine"})]
+    assert _run(monkeypatch, ["clear"], {"source": "clear"}) == 0
+    assert len(calls) == 1   # no session id -> nothing to report
+
+
 class _Proc:
     pid = os.getpid()
 
@@ -161,6 +171,7 @@ def test_hooks_files_exist():
         assert {"Stop", "Notification", "UserPromptSubmit", "PostToolUse", "PreToolUse"} <= set(hooks)
         matchers = [h.get("matcher") for h in hooks["PreToolUse"]]
         assert "AskUserQuestion" in matchers
+        assert [h["matcher"] for h in hooks["SessionStart"]] == ["clear"]
         assert any(m and "Edit" in m for m in matchers) is with_locks
 
 

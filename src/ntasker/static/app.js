@@ -49,6 +49,9 @@ const LS_KEY_RUN_TERM_WIDTH = 'ntasker.runTermWidth';
 const LS_KEY_RUN_MODES = 'ntasker.runModes';
 const RUN_MODES_KEEP = 50;
 const RUN_MODE_DEFAULT = 'split';
+// How long a `/clear` gets to reset the session before "Send using fresh
+// context" types the reply into it -- typed too early, it can get lost.
+const CLEAR_SETTLE_MS = 3000;
 const RUN_PANE_WIDTH_DEFAULT = 480;
 const RUN_PANE_WIDTH_MIN = 260;
 const RUN_PANE_WIDTH_MAX = 1400;
@@ -4644,12 +4647,19 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // Images go first: each is shipped like a file dropped onto the
         // terminal (the server saves it and types its path into the input
         // line), then the text follows and Enter submits both together.
-        async sendConvReply() {
+        // `fresh`: the Send button's "fresh context" option -- a `/clear` goes in
+        // first, the reply follows into the new context once it has settled.
+        async sendConvReply(fresh = false) {
             const text = this.convReply.trim();
             const images = this.convImages;
             if (!text && !images.length) return;
             const s = _claudeTerms.get(this.claudeView);
             if (!s || s.ws.readyState !== WebSocket.OPEN) return;
+            if (fresh) {
+                this.sendQuickPrompt('/clear');
+                await new Promise(resolve => setTimeout(resolve, CLEAR_SETTLE_MS));
+                if (s.ws.readyState !== WebSocket.OPEN) return;
+            }
             if (images.length) {
                 const payloads = await Promise.all(images.map(img => _fileToBase64(img.file)));
                 if (s.ws.readyState !== WebSocket.OPEN) return;
