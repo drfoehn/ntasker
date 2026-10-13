@@ -4,6 +4,9 @@ All notable changes to ntasker.
 
 Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
+## [3.15.0] — 2026-10-13
+Reports optional via global setting; run view sends with fresh context; hooks ignore subagent steps.
+
 ## [3.14.0] — 2026-10-11
 Run view: answer the agent's questions directly in the conversation.
 Run view: quick prompt chips below the terminal; task heading and update-report button.
