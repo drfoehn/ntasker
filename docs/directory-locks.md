@@ -95,7 +95,9 @@ shipped as package data in `src/ntasker/claude_assets/hooks/`:
 | `locks.json` | `dir_locks` on | the same, plus `PreToolUse` (`Edit\|Write\|MultiEdit\|NotebookEdit\|Bash`) -> `ntasker hook pretooluse` |
 
 The state hooks give the board an **explicit** waiting / running signal instead of the output-silence heuristic (see
-[claude-runs.md](claude-runs.md#session-indicators----running-vs-waiting)); the `ask` hook hands the agent's open
+[claude-runs.md](claude-runs.md#session-indicators----running-vs-waiting)). A subagent's steps fire the same hooks
+(their payload carries `agent_id`); `hook running` ignores those, so a background agent at work cannot flag a session
+"running" while it waits on the user and drop its open question. The `ask` hook hands the agent's open
 question to the conversation pane (see [claude-runs.md](claude-runs.md#the-run-view----conversation-terminal-split)).
 The `clear` hook moves the task to the new session id Claude Code starts on `/clear`.
 The lock hook refuses a tool call whose

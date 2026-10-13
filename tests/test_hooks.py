@@ -93,6 +93,13 @@ def test_state_hooks_post(monkeypatch, fake_server):
     ]
 
 
+def test_running_hook_ignores_subagents(monkeypatch, fake_server):
+    """A (background) subagent's step must not flag the waiting main session running."""
+    calls, _ = fake_server
+    assert _run(monkeypatch, ["running"], {"agent_id": "a1", "tool_name": "Bash"}) == 0
+    assert calls == []
+
+
 def test_ask_hook_posts_the_questions(monkeypatch, fake_server):
     calls, _ = fake_server
     qs = [{"question": "Which?", "options": [{"label": "A"}], "multiSelect": False}]

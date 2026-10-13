@@ -1711,7 +1711,13 @@ def _hook_state(waiting: bool) -> int:
     ctx = _hook_context()
     if ctx is None:
         return 0
-    task_id, base, _payload = ctx
+    task_id, base, payload = ctx
+    # A subagent's tool calls fire the same hooks, marked with ``agent_id``.
+    # They say nothing about the main session: a background agent's step
+    # would flag it "running" while it waits on the user and drop its open
+    # question from the run view.
+    if not waiting and payload.get("agent_id"):
+        return 0
     with contextlib.suppress(Exception):
         _api_call(base, "POST", f"/api/claude/sessions/{task_id}/state", {"waiting": waiting}, 2.0)
     return 0
