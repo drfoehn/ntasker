@@ -1150,6 +1150,19 @@ span.task-activity {
     border-color: #c25e3f;
     color: #fff;
 }
+/* Idle run button on a task: "Start" with a play glyph instead of the bare
+ * agent logo, outlined in the brand colour so it reads as the task's action. */
+.btn-claude-start,
+.btn-claude-start:focus {
+    border-color: #d97757;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    font-weight: 500;
+}
+.btn-claude-start:hover,
+.btn-claude-start:active {
+    border-color: #c25e3f;
+}
 /* Claude is blocked on a prompt: the run button turns amber and pulses so the
  * waiting task is easy to spot among the others. */
 .btn-claude-waiting,

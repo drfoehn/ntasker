@@ -272,11 +272,14 @@
                 <template x-if="!canResumeOpen(task) && taskRunnable(task) && task.status !== 'done'">
                     <button class="{{ b }} btn-claude" @click.stop="runNext(task)"
                             :disabled="taskRunPhase(task.id) === 'external' || (task.draft && !taskRunPhase(task.id))"
-                            :class="{'btn-claude-waiting': taskRunPhase(task.id) === 'waiting'}"
+                            :class="{'btn-claude-waiting': taskRunPhase(task.id) === 'waiting', 'btn-claude-start': !taskRunPhase(task.id)}"
                             :aria-label="runButtonTitle(task)" :title="runButtonTitle(task)">
                         <template x-if="['running', 'external'].includes(taskRunPhase(task.id))"><span class="spinner-border spinner-border-sm text-secondary"></span></template>
                         <template x-if="taskRunPhase(task.id) === 'waiting'"><i class="ti ti-help fs-3"></i></template>
-                        <img :src="agentIconUrl(task)" class="claude-logo-icon" alt="">
+                        {# Idle: a labelled start button, so it reads as an action. A live #}
+                        {# session keeps the agent logo next to its indicator. #}
+                        <template x-if="taskRunPhase(task.id)"><img :src="agentIconUrl(task)" class="claude-logo-icon" alt=""></template>
+                        <template x-if="!taskRunPhase(task.id)"><span class="d-inline-flex align-items-center"><i class="ti ti-player-play me-1"></i><span x-text="$i18n('claude_start')"></span></span></template>
                     </button>
                 </template>
                 {# Agent CLI not installed: greyed-out logo in a non-clickable box, so #}
@@ -720,6 +723,13 @@
             <div class="container-fluid">
                 <div class="row g-2 align-items-center">
                     <div class="col-auto">
+                        {# The page's primary action: opens (and closes) the new-task form below. #}
+                        <button type="button" class="btn btn-primary me-3"
+                                @click="toggleNewTaskForm()"
+                                :aria-expanded="formOpen">
+                            <i class="ti ti-plus me-1 fs-2"></i>
+                            <span x-text="$i18n('new_task')"></span>
+                        </button>
                         {# Segmented control -- the one style for every view switch on the page. #}
                         <div class="btn-group view-switch" role="group">
                             <button type="button" class="btn btn-ghost-secondary"
@@ -779,24 +789,19 @@
                 {# v2.0: projects_dir-Banner is gone -- projects emerge #}
                 {# implicitly from tasks; no filesystem setup required. #}
 
-                {# New-task form. The header doubles as an accordion toggle and #}
-                {# the body starts collapsed, so more of the task list stays #}
-                {# visible until the user actually wants to add something. #}
-                <div class="card mb-3">
-                    <div class="card-header" role="button" tabindex="0"
-                         style="cursor: pointer;"
-                         @click="toggleNewTaskForm()"
-                         @keydown.enter.prevent="toggleNewTaskForm()"
-                         @keydown.space.prevent="toggleNewTaskForm()"
-                         :aria-expanded="formOpen">
+                {# New-task form. Hidden until the "New task" button in the page #}
+                {# header opens it, so more of the task list stays visible until #}
+                {# the user actually wants to add something. #}
+                <div class="card mb-3" x-show="formOpen" x-cloak>
+                    <div class="card-header">
                         <h3 class="card-title mb-0">
                             <i class="ti ti-plus me-1"></i>
                             {{ t('New task') }}
                         </h3>
-                        <i class="ti ms-auto fs-2 text-secondary"
-                           :class="formOpen ? 'ti-chevron-up' : 'ti-chevron-down'"></i>
+                        <button type="button" class="btn-close ms-auto" :aria-label="$i18n('close')"
+                                @click="toggleNewTaskForm()"></button>
                     </div>
-                    <div class="card-body" x-show="formOpen" x-cloak>
+                    <div class="card-body">
                         <form @submit.prevent="createTask()">
                             <div class="row g-2">
                                 {# The task itself comes first and unlabeled: the title is the one #}
@@ -818,11 +823,21 @@
                                 </div>
                                 {# Tools that act on the description (attach context, dictate) sit #}
                                 {# right under it in one row; each plugin slot is a flex child. #}
-                                {% if plugin_slots['task_form'] %}
+                                {# The toggle at the row's end unfolds everything else: a task #}
+                                {# needs only a title, so the routing fields start out folded.  #}
                                 <div class="col-12 task-form-tools">
                                     {% for tpl in plugin_slots['task_form'] %}{% include tpl %}{% endfor %}
+                                    <button type="button" class="btn btn-sm btn-ghost-secondary ms-auto"
+                                            @click="toggleFormMore()" :aria-expanded="formMoreOpen">
+                                        <i class="ti me-1" :class="formMoreOpen ? 'ti-chevron-up' : 'ti-chevron-down'"></i>
+                                        {{ t('More options') }}
+                                        {# Folded options that differ from their default still apply -- say so. #}
+                                        <span class="badge bg-azure-lt ms-2" x-show="!formMoreOpen && formOptionsSet()" x-cloak
+                                              x-text="formOptionsSet()" :title="$i18n('form_options_set')"></span>
+                                    </button>
                                 </div>
-                                {% endif %}
+                                <div class="col-12" x-show="formMoreOpen" x-cloak>
+                                <div class="row g-2">
                                 <div class="col-12"><hr class="task-form-divider"></div>
                                 <div class="col-md-3">
                                     <div class="form-label d-flex align-items-center">
@@ -1073,10 +1088,8 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-12"><hr class="task-form-divider"></div>
-                                <div class="col-12 d-flex flex-wrap align-items-center gap-2">
+                                <div class="col-12 d-flex flex-wrap align-items-center gap-3">
                                     {# Draft: a parked idea -- never started by the queue, the run button or /task. #}
-                                    {# Sits next to the actions because it decides what "create" means. #}
                                     <label class="form-check mb-0" :title="$i18n('draft_badge')">
                                         <input type="checkbox" class="form-check-input" x-model="form.draft">
                                         <span class="form-check-label">{{ t('Park as a draft') }}</span>
@@ -1087,10 +1100,15 @@
                                         <input type="checkbox" class="form-check-input" x-model="form.fasttrack">
                                         <span class="form-check-label">{{ t('Fasttrack') }}</span>
                                     </label>
-                                    <label class="form-check mb-0 me-auto" x-show="form.fasttrack" :title="$i18n('fail_continue_hint')">
+                                    <label class="form-check mb-0" x-show="form.fasttrack" :title="$i18n('fail_continue_hint')">
                                         <input type="checkbox" class="form-check-input" x-model="form.fail_continue">
                                         <span class="form-check-label">{{ t('Continue on failure') }}</span>
                                     </label>
+                                </div>
+                                </div>
+                                </div>
+                                <div class="col-12"><hr class="task-form-divider"></div>
+                                <div class="col-12 d-flex flex-wrap align-items-center justify-content-end gap-2">
                                     <button type="submit" class="btn btn-primary" :disabled="!form.title.trim()">
                                         <i class="ti ti-plus me-1 fs-3"></i>
                                         {{ t('Create') }}
