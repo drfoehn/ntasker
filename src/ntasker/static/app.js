@@ -3750,11 +3750,24 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             return this.claudeExternal.includes(taskId) ? 'external' : null;
         },
 
+        // What a click on the task's run button does, as its label key:
+        // start (no session), view (running), answer (the agent asks),
+        // review (the agent handed over and waits for the sign-off),
+        // external (a session outside ntasker -- not clickable).
+        runButtonState(task) {
+            const phase = this.taskRunPhase(task.id);
+            if (!phase) return 'start';
+            if (phase === 'external') return 'external';
+            if (phase === 'waiting') return task.phase === 'review' ? 'review' : 'answer';
+            return 'view';
+        },
+
         // Tooltip/aria for the per-task run button. A live session means "switch
         // to it" (not "run"); an idle session blocked on a prompt keeps the
         // "waiting for input" hint; no session means "run".
         runButtonTitle(task) {
             const phase = this.taskRunPhase(task.id);
+            if (phase === 'waiting' && task.phase === 'review') return _i('claude_review_hint');
             if (phase === 'waiting') return _i('claude_waiting');
             if (phase === 'external') return _i('claude_external');
             if (task.draft && !phase) return _i('draft_no_run');
