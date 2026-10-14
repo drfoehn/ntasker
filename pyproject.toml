@@ -94,10 +94,11 @@ testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ntasker"]
-# Default Hatchling behaviour already ships every file under src/ntasker/,
-# including ``locale/<lang>/LC_MESSAGES/ntasker.{po,mo}`` and ``ntasker.pot``.
-# Listed explicitly only for visibility -- no force-include trick (lesson
-# learned in v1.2.2/v1.2.3: force-include duplicates files in the wheel).
+# Hatchling ships every file under src/ntasker/ -- except what .gitignore
+# excludes, and the compiled ``*.mo`` catalogs are gitignored. ``artifacts``
+# lets them back in (no force-include trick: in v1.2.2/v1.2.3 force-include
+# duplicated files in the wheel). Run ``make i18n-compile`` before building.
+artifacts = ["src/ntasker/locale/*/LC_MESSAGES/*.mo"]
 
 [tool.uv]
 # `uv tool install <this dir>` caches the built wheel and only rebuilds
