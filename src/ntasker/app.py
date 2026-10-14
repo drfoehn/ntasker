@@ -873,6 +873,7 @@ def build_js_strings() -> dict[str, str]:
         "edit_task": _("Edit task"),
         "task_n": _("Task"),
         "close": _("Close"),
+        "form_options_set": _("Options that differ from their default"),
         "cancel": _("Cancel"),
         "save": _("Save"),
         # Toasts
@@ -960,6 +961,16 @@ def build_js_strings() -> dict[str, str]:
         ),
         # Agent run -- interactive terminal session
         "claude_run": _("Run"),
+        # Run button labels, keyed by runButtonState() in app.js.
+        "claude_state_start": _("Start"),
+        "claude_state_view": _("Watch"),
+        "claude_state_answer": _("Reply"),
+        "claude_state_review": _("Check"),
+        "claude_state_external": _("External"),
+        "claude_resume_short": _("Resume"),
+        "claude_review_hint": _(
+            "The agent handed the task over -- open the conversation to check its work"
+        ),
         "claude_resume": _("Resume session"),
         "claude_resume_open": _(
             "Continue this task's last session -- the run button next to it "

@@ -1150,6 +1150,34 @@ span.task-activity {
     border-color: #c25e3f;
     color: #fff;
 }
+/* Labelled agent button on a task (Start / View / Answer / Check / Resume):
+ * the label says what a click does, outlined in the brand colour so it reads
+ * as the task's action. Padding wins over the board's px-1. */
+.btn-claude-labeled,
+.btn-claude-labeled:focus {
+    border-color: #d97757;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.btn-claude-labeled:hover,
+.btn-claude-labeled:active {
+    border-color: #c25e3f;
+}
+.btn-claude-labeled .spinner-border {
+    width: 0.9rem;
+    height: 0.9rem;
+}
+/* The agent handed the task over and its session waits for the sign-off:
+ * calm blue instead of the pulsing amber of a real question. */
+.btn-claude-review,
+.btn-claude-review:focus,
+.btn-claude-review:hover,
+.btn-claude-review:active {
+    border-color: var(--tblr-azure);
+    color: var(--tblr-azure);
+}
 /* Claude is blocked on a prompt: the run button turns amber and pulses so the
  * waiting task is easy to spot among the others. */
 .btn-claude-waiting,

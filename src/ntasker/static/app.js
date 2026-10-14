@@ -20,6 +20,7 @@ const LS_KEY_VIEW_MODE = 'ntasker.viewMode';
 const LS_KEY_SORT_MODE = 'ntasker.sortMode';
 const LS_KEY_KANBAN_DONE_COLLAPSED = 'ntasker.kanbanDoneCollapsed';
 const LS_KEY_SHOW_EMPTY_PROJECTS = 'ntasker.showEmptyProjects';
+const LS_KEY_FORM_MORE_OPEN = 'ntasker.formMoreOpen';
 const LS_KEY_EXPANDED_PROJECT_GROUPS = 'ntasker.expandedProjectGroups';
 const LS_KEY_SHOW_HIDDEN_PROJECTS = 'ntasker.showHiddenProjects';
 // Sidebar tree: a project name is split at the first of these to find the
@@ -294,9 +295,13 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // Done column in kanban defaults to collapsed so the workflow columns
         // get the real estate; user can expand it via the column header.
         doneCollapsed: (localStorage.getItem(LS_KEY_KANBAN_DONE_COLLAPSED) ?? '1') === '1',
-        // New-task form accordion: collapsed by default so more of the task
-        // list stays visible; the card header toggles it (toggleNewTaskForm).
+        // New-task form: hidden by default so more of the task list stays
+        // visible; the page header's "New task" button toggles it
+        // (toggleNewTaskForm).
         formOpen: false,
+        // Everything but title + description sits behind "More options";
+        // folded by default, the user's choice is persisted.
+        formMoreOpen: localStorage.getItem(LS_KEY_FORM_MORE_OPEN) === '1',
         // The project field is locked while the form was opened from a
         // project's "+" (the project is given); the header toggle unlocks it.
         formProjectLocked: false,
@@ -1395,6 +1400,22 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             }
         },
 
+        toggleFormMore() {
+            this.formMoreOpen = !this.formMoreOpen;
+            localStorage.setItem(LS_KEY_FORM_MORE_OPEN, this.formMoreOpen ? '1' : '0');
+        },
+
+        // How many of the foldable options differ from their default -- the
+        // badge on the folded "More options" toggle, so nothing applies unseen.
+        formOptionsSet() {
+            const f = this.form;
+            return [
+                f.project.trim(), f.phase && f.phase !== 'planned', f.priority !== 'normal',
+                f.agent, f.model.trim(), f.tags.length, f.depends.length, f.locks.length,
+                f.draft, f.fasttrack,
+            ].filter(Boolean).length;
+        },
+
         // Sidebar "+" on a project row: open the new-task form pre-filled with
         // that project and drop the caret straight into the Title field. Leaves
         // the run view first (the form lives on the board) so the focus lands.
@@ -1402,6 +1423,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             this.form.project = name;
             this.formProjectLocked = true;
             this.formOpen = true;
+            this.formMoreOpen = true;  // the given project must be visible
             if (this.claudeView !== null) location.hash = '#/';
             this.$nextTick(() => {
                 const el = this.$refs.titleInput;
@@ -1987,6 +2009,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             this.form.project = outcome.project || '';
             this.form.description = _i('outcome_followup_of', { id: outcome.task_id, title: outcome.title });
             this.formOpen = true;
+            this.formMoreOpen = true;
             if (this.claudeView !== null) location.hash = '#/';
             this.$nextTick(() => this.$refs.titleInput?.focus());
         },
@@ -3727,11 +3750,24 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             return this.claudeExternal.includes(taskId) ? 'external' : null;
         },
 
+        // What a click on the task's run button does, as its label key:
+        // start (no session), view (running), answer (the agent asks),
+        // review (the agent handed over and waits for the sign-off),
+        // external (a session outside ntasker -- not clickable).
+        runButtonState(task) {
+            const phase = this.taskRunPhase(task.id);
+            if (!phase) return 'start';
+            if (phase === 'external') return 'external';
+            if (phase === 'waiting') return task.phase === 'review' ? 'review' : 'answer';
+            return 'view';
+        },
+
         // Tooltip/aria for the per-task run button. A live session means "switch
         // to it" (not "run"); an idle session blocked on a prompt keeps the
         // "waiting for input" hint; no session means "run".
         runButtonTitle(task) {
             const phase = this.taskRunPhase(task.id);
+            if (phase === 'waiting' && task.phase === 'review') return _i('claude_review_hint');
             if (phase === 'waiting') return _i('claude_waiting');
             if (phase === 'external') return _i('claude_external');
             if (task.draft && !phase) return _i('draft_no_run');
