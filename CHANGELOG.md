@@ -4,6 +4,9 @@ All notable changes to ntasker.
 
 Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
+## [3.16.0] — 2026-10-14
+New-task button with folded form options; agent button labelled by action; wheel ships .mo catalogs.
+
 ## [3.15.0] — 2026-10-13
 Reports optional via global setting; run view sends with fresh context; hooks ignore subagent steps.
 
