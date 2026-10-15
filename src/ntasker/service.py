@@ -82,7 +82,9 @@ def resolve_update_command(setting: str | None) -> list[str]:
     Otherwise auto-detect:
 
     * a ``uv tool`` install lives under a ``uv/tools`` venv -> ``uv tool
-      upgrade ntasker``;
+      upgrade ntasker``; if it was built from a local checkout (or git /
+      URL), ``uv tool install --upgrade ntasker[extras]`` switches it back
+      to PyPI;
     * the current interpreter has ``pip`` -> ``pip install -U`` against it,
       so we hit the right environment;
     * no ``pip`` (typical for ``uv``-managed venvs, e.g. ``uv run``) -> fall
@@ -93,6 +95,15 @@ def resolve_update_command(setting: str | None) -> list[str]:
     if setting and setting.strip():
         return shlex.split(setting)
     if install_needs_restart():
+        # A tool installed from a local checkout / git / URL is pinned to that
+        # source: ``uv tool upgrade`` just rebuilds it and never sees PyPI.
+        # Re-install from the index instead (keeping the extras); afterwards
+        # the receipt is a plain registry one and ``upgrade`` works again.
+        req = uv_tool_requirement()
+        if req is not None and not _is_registry_requirement(req):
+            extras = req.get("extras") or []
+            spec = f"ntasker[{','.join(extras)}]" if extras else "ntasker"
+            return ["uv", "tool", "install", "--upgrade", spec]
         return ["uv", "tool", "upgrade", "ntasker"]
     if _has_pip():
         return [sys.executable, "-m", "pip", "install", "-U", "ntasker"]
@@ -125,6 +136,43 @@ def install_needs_restart() -> bool:
     """Whether :func:`resolve_install_command` may replace ntasker's own
     files (a ``uv tool`` environment), so the server should restart after."""
     return "/uv/tools/" in sys.executable.replace("\\", "/").lower()
+
+
+# Receipt keys that pin a requirement to a non-index source.
+_LOCAL_SOURCE_KEYS = ("directory", "path", "editable", "git", "url")
+
+
+def uv_tool_requirement(prefix: str | None = None) -> dict | None:
+    """The ``ntasker`` entry of the ``uv tool`` receipt, or ``None`` when
+    there is none (not a uv tool env, unreadable receipt)."""
+    import tomllib  # noqa: PLC0415
+
+    receipt = Path(prefix or sys.prefix) / "uv-receipt.toml"
+    try:
+        data = tomllib.loads(receipt.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    for req in data.get("tool", {}).get("requirements", []):
+        if isinstance(req, dict) and req.get("name") == "ntasker":
+            return req
+    return None
+
+
+def _is_registry_requirement(req: dict) -> bool:
+    """Whether a receipt requirement resolves from the package index."""
+    return not any(key in req for key in _LOCAL_SOURCE_KEYS)
+
+
+def local_install_source(prefix: str | None = None) -> str | None:
+    """The local checkout / git / URL a ``uv tool`` install of ntasker was
+    built from, or ``None`` for a PyPI install (or no uv tool env)."""
+    req = uv_tool_requirement(prefix)
+    if req is None:
+        return None
+    for key in _LOCAL_SOURCE_KEYS:
+        if key in req:
+            return str(req[key])
+    return None
 
 
 def _has_pip() -> bool:

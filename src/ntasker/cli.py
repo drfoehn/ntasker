@@ -2344,6 +2344,13 @@ def cmd_self_update(args: argparse.Namespace) -> int:
         update_command = get_setting("update_command")
 
     cmd = service.resolve_update_command(update_command)
+    source = None if update_command else service.local_install_source()
+    if source and service.install_needs_restart():
+        print(
+            _("ntasker: installed from {source} -- switching to the PyPI release.").format(
+                source=source
+            )
+        )
     print(_("ntasker: running `{cmd}`").format(cmd=" ".join(cmd)))
     proc = subprocess.run(cmd)  # noqa: S603 -- user-configured / auto-detected
     if proc.returncode != 0:
