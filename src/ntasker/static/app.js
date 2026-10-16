@@ -4589,6 +4589,24 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             setTimeout(() => this.loadClaudeSessions(), 400);
         },
 
+        // Interrupt the running turn: Esc into the terminal, as Claude Code's
+        // TUI takes it.
+        interruptAgent() {
+            this._sendKeys('\x1b');
+        },
+
+        // Esc anywhere on the run page while the conversation is shown
+        // interrupts the agent -- unless the terminal has the focus (it sends
+        // its own Esc), a modal is open or something else took the key.
+        onConvEscape(event) {
+            if (event.defaultPrevented || this.planMode) return;
+            const status = this.activeTab?.status;
+            if (status !== 'running' && status !== 'waiting') return;
+            if (event.target instanceof Element && event.target.closest('.xterm')) return;
+            if ([...document.querySelectorAll('.modal')].some(m => m.offsetWidth > 0)) return;
+            this.interruptAgent();
+        },
+
         _sendRaw(data) {
             const s = _claudeTerms.get(this.claudeView);
             if (!s || s.ws.readyState !== WebSocket.OPEN) return false;

@@ -664,6 +664,8 @@ def build_js_strings() -> dict[str, str]:
         "conv_answer": _("Answer"),
         "conv_steps": _("Steps: {n}"),
         "conv_working": _("Working ..."),
+        "conv_interrupt": _("Interrupt"),
+        "conv_interrupt_hint": _("Interrupt the agent (Esc)"),
         "conv_waiting": _("Waiting for your next instruction."),
         "conv_exited": _("The session has ended."),
         "conv_empty": _("No conversation yet -- the agent is starting up."),

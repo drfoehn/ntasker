@@ -5,9 +5,10 @@
 {# are folded away. Pending permission prompts and questions can be answered #}
 {# here (a question with its options, free text and a submit, like the Claude #}
 {# app; the answered ones stay in the turn as decision blocks), and whatever #}
-{# stops the agent (usage limit, login, network) shows as a card. The task's #}
+{# stops the agent (usage limit, login, network) shows as a card. Esc or the #}
+{# Interrupt button stops a running turn, like Esc in the terminal. The task's #}
 {# report sits in the pane beside it (see index.html). #}
-<div class="claude-conv-page card flex-fill d-flex flex-column">
+<div class="claude-conv-page card flex-fill d-flex flex-column" @keydown.escape.window="onConvEscape($event)">
     <div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom flex-wrap">
         <i class="ti ti-messages fs-3 text-secondary"></i>
         <span class="fw-medium" x-text="$i18n('conv_title')"></span>
@@ -266,6 +267,11 @@
                     <div class="d-flex align-items-center gap-2 text-azure small" style="min-width: 0">
                         <span class="spinner-border spinner-border-sm flex-shrink-0"></span>
                         <span class="text-truncate" x-text="convActivity || $i18n('conv_working')"></span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0 ms-auto"
+                                x-show="activeTab?.status === 'running'" :title="$i18n('conv_interrupt_hint')"
+                                @click="interruptAgent()">
+                            <i class="ti ti-player-pause me-1"></i><span x-text="$i18n('conv_interrupt')"></span>
+                        </button>
                     </div>
                 </template>
                 <template x-if="activeTab?.status === 'waiting' && !convPrompt && !convBlocker">
