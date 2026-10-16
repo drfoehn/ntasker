@@ -517,6 +517,10 @@ def triage_text(text: str) -> dict:
     cat = catalog()
     names = [name for name, _s in cat]
     prefix, body = split_prefix(text, names)
+    if prefix is not None:
+        # The model sees the note without its prefix -- name the project so it
+        # does not ask which one is meant.
+        body = f"(Project, named by the user: {prefix})\n\n{body}"
     prompt = system_prompt(cat, _examples())
     obj = parse_result(run_claude(_argv(prompt, _schema(names)), body), names)
     if prefix is not None:

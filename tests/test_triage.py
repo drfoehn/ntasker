@@ -133,8 +133,10 @@ def test_tick_creates_proposed_task(db, monkeypatch):
     stored = json.loads(task["triage"])
     assert stored["raw"] == "ntasker: add a --json flag" and stored["prefix"] is True
     assert stored["candidates"][0] == {"project": "ntasker", "reason": "prefix"}
-    # the prefix is stripped before the call, the catalog is in the system prompt
-    assert calls[0][1] == "add a --json flag" and "medux/online summary" in calls[0][0][1]
+    # the prefix becomes a project line (no "which project?" question), the
+    # catalog is in the system prompt
+    assert calls[0][1] == "(Project, named by the user: ntasker)\n\nadd a --json flag"
+    assert "medux/online summary" in calls[0][0][1]
 
 
 def test_follow_up_note_quotes_the_question():
@@ -372,7 +374,7 @@ def test_end_to_end_fake_binary(db, monkeypatch, tmp_path):
     assert argv[argv.index("--tools") + 1] == "" and argv[argv.index("--model") + 1] == "haiku"
     schema = json.loads(argv[argv.index("--json-schema") + 1])
     assert schema["properties"]["project"]["enum"] == [*NAMES, None]
-    assert (out / "stdin").read_text() == "add a --json flag"
+    assert (out / "stdin").read_text() == "(Project, named by the user: ntasker)\n\nadd a --json flag"
     env = dict(line.split("=", 1) for line in (out / "env").read_text().splitlines() if "=" in line)
     assert "CLAUDECODE" not in env and env["NTASKER_TASK_ID"] == "inbox"
     assert Path(env["PWD"]).resolve() == Path(os.path.realpath(triage.tempfile.gettempdir()))

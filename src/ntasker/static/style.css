@@ -1432,10 +1432,37 @@ span.task-activity {
 .settings-nav .list-group-item {
     border-radius: var(--tblr-border-radius);
 }
+/* Wide screens: pin the page to the viewport -- topbar, page header and rail
+ * stay put, only the panel column scrolls. Same flex chain as the Claude run
+ * view: every level gets min-height:0 so it may shrink below its content. */
 @media (min-width: 768px) {
-    .settings-nav .card-body {
-        position: sticky;
-        top: 1rem;
+    .page-settings {
+        height: 100vh;
+        overflow: hidden;
+    }
+    .page-settings .page-wrapper,
+    .page-settings .page-body {
+        min-height: 0;
+    }
+    .page-settings .page-body {
+        display: flex;
+    }
+    .page-settings .page-body > .container-fluid {
+        display: flex;
+        min-height: 0;
+    }
+    .settings-card {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+    .settings-card > .row {
+        flex: 1 1 auto;
+        flex-wrap: nowrap;
+        min-height: 0;
+    }
+    .settings-nav,
+    .settings-panels {
+        overflow-y: auto;
     }
 }
 /* Narrow screens: the rail becomes a horizontally scrolling pill row. */

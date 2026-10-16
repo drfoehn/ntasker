@@ -621,7 +621,7 @@ def build_js_strings() -> dict[str, str]:
         "outcome_create_task": _("Create a task from this suggestion"),
         "outcome_followup_of": _("Follow-up of #{id} {title}"),
         # Inbox (see ntasker.triage)
-        "inbox_placeholder": _("Drop an idea -- Ctrl+K"),
+        "inbox_placeholder": _("Drop an idea -- \"project: ...\" picks the project -- Ctrl+K"),
         "inbox_stored": _("Stored -- the inbox triages it"),
         "inbox_send_failed": _("Could not store the note"),
         "inbox_refine_placeholder": _("Answer or correction -- Enter re-triages"),

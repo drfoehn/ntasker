@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ntasker 1.3.0\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-15 15:07+0200\n"
+"POT-Creation-Date: 2026-10-16 08:37+0200\n"
 "PO-Revision-Date: 2026-05-02 09:19+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -590,8 +590,8 @@ msgid "Follow-up of #{id} {title}"
 msgstr "Folgeaufgabe von #{id} {title}"
 
 #: src/ntasker/app.py:624
-msgid "Drop an idea -- Ctrl+K"
-msgstr "Idee ablegen -- Strg+K"
+msgid "Drop an idea -- \"project: ...\" picks the project -- Ctrl+K"
+msgstr "Idee ablegen -- \"projekt: ...\" wählt das Projekt -- Strg+K"
 
 #: src/ntasker/app.py:625
 msgid "Stored -- the inbox triages it"
@@ -6030,4 +6030,7 @@ msgstr ""
 
 #~ msgid "Nothing waiting. Type an idea into the field at the top."
 #~ msgstr "Nichts wartet. Tipp eine Idee ins Feld oben ein."
+
+#~ msgid "Drop an idea -- Ctrl+K"
+#~ msgstr "Idee ablegen -- Strg+K"
 
