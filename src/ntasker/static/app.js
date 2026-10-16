@@ -4652,6 +4652,14 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             return _fmtTokens(n);
         },
 
+        // Answer-header badge: fresh input (incl. cache writes) first, the
+        // cheap cache reads apart -- output has no cache share.
+        tokensBadge(u) {
+            if (!u) return '';
+            const args = { input: this.fmtTokens(u.input - u.cache_read), cached: this.fmtTokens(u.cache_read), output: this.fmtTokens(u.output) };
+            return _i(u.cache_read ? 'conv_tokens_badge' : 'conv_tokens_badge_nocache', args);
+        },
+
         tokensHint(u) {
             if (!u) return '';
             const share = u.input ? u.cache_read / u.input : 0;

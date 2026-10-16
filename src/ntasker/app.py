@@ -709,6 +709,8 @@ def build_js_strings() -> dict[str, str]:
         "conv_edited_files": _("Edited:"),
         "conv_file_diff": _("Show the changes to {file}"),
         "conv_tokens_total": _("{n} tokens"),
+        "conv_tokens_badge": _("in {input} (+{cached} cache) / out {output}"),
+        "conv_tokens_badge_nocache": _("in {input} / out {output}"),
         "conv_tokens_hint": _("Input {input} tokens ({cached} from cache) -- output {output} tokens"),
         "conv_permission": _("The agent wants to use {tool}."),
         "conv_permission_hint": _("Allow and Deny answer the dialog in the terminal. For more options open the terminal."),

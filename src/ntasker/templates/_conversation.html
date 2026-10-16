@@ -82,7 +82,7 @@
                         <span class="flex-fill" x-show="convIsOpen(i, 'a')"></span>
                         <template x-if="turn.usage.input + turn.usage.output > 0">
                             <span class="badge bg-secondary-lt text-nowrap" :title="tokensHint(turn.usage)">
-                                <i class="ti ti-coins me-1"></i><span x-text="fmtTokens(turn.usage.input + turn.usage.output)"></span>
+                                <i class="ti ti-coins me-1"></i><span x-text="tokensBadge(turn.usage)"></span>
                             </span>
                         </template>
                         <span class="text-secondary small text-nowrap" x-show="turn.answer_at"
