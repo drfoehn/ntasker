@@ -2326,7 +2326,8 @@ def cmd_self_update(args: argparse.Namespace) -> int:
     """Upgrade the ntasker package from PyPI, then restart the service.
 
     The package-upgrade command is the ``update_command`` setting, or an
-    auto-detected default (``uv tool upgrade`` / ``pip install -U``). On a
+    auto-detected default (``uv tool upgrade`` / ``pip install -U``). An
+    editable install is re-installed from its checkout instead of PyPI. On a
     successful upgrade and unless ``--no-restart`` is given, the supervised
     service is restarted so the new code takes effect for the running daemon.
     """
@@ -2351,6 +2352,10 @@ def cmd_self_update(args: argparse.Namespace) -> int:
                 source=source
             )
         )
+    elif not update_command and not service.install_needs_restart():
+        checkout = service.editable_source()
+        if checkout:
+            print(_("ntasker: editable install -- reinstalling from {checkout}.").format(checkout=checkout))
     print(_("ntasker: running `{cmd}`").format(cmd=" ".join(cmd)))
     proc = subprocess.run(cmd)  # noqa: S603 -- user-configured / auto-detected
     if proc.returncode != 0:

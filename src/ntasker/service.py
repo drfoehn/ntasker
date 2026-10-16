@@ -81,6 +81,8 @@ def resolve_update_command(setting: str | None) -> list[str]:
     Explicit ``update_command`` setting wins (parsed with ``shlex``).
     Otherwise auto-detect:
 
+    * an editable install (a development checkout) is re-installed from
+      that checkout -- never replaced by the PyPI release;
     * a ``uv tool`` install lives under a ``uv/tools`` venv -> ``uv tool
       upgrade ntasker``; if it was built from a local checkout (or git /
       URL), ``uv tool install --upgrade ntasker[extras]`` switches it back
@@ -105,6 +107,13 @@ def resolve_update_command(setting: str | None) -> list[str]:
             spec = f"ntasker[{','.join(extras)}]" if extras else "ntasker"
             return ["uv", "tool", "install", "--upgrade", spec]
         return ["uv", "tool", "upgrade", "ntasker"]
+    checkout = editable_source()
+    if checkout:
+        if _has_pip():
+            return [sys.executable, "-m", "pip", "install", "-e", checkout]
+        if shutil.which("uv"):
+            return ["uv", "pip", "install", "--python", sys.executable, "-e", checkout]
+        return [sys.executable, "-m", "pip", "install", "-e", checkout]
     if _has_pip():
         return [sys.executable, "-m", "pip", "install", "-U", "ntasker"]
     if shutil.which("uv"):
@@ -173,6 +182,24 @@ def local_install_source(prefix: str | None = None) -> str | None:
         if key in req:
             return str(req[key])
     return None
+
+
+def editable_source() -> str | None:
+    """The checkout an editable install of ntasker points to (from its
+    ``direct_url.json``, PEP 610), or ``None`` for a regular install."""
+    import json  # noqa: PLC0415
+    from importlib.metadata import PackageNotFoundError, distribution  # noqa: PLC0415
+    from urllib.parse import urlparse  # noqa: PLC0415
+    from urllib.request import url2pathname  # noqa: PLC0415
+
+    try:
+        info = json.loads(distribution("ntasker").read_text("direct_url.json") or "{}")
+    except (PackageNotFoundError, ValueError):
+        return None
+    url = info.get("url", "")
+    if not info.get("dir_info", {}).get("editable") or not url.startswith("file:"):
+        return None
+    return url2pathname(urlparse(url).path)
 
 
 def _has_pip() -> bool:

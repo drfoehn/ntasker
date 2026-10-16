@@ -4,6 +4,9 @@ All notable changes to ntasker.
 
 Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
+## [3.16.1] — 2026-10-16
+Self-update: local uv tool installs switch to PyPI; editable installs reinstall from their checkout.
+
 ## [3.16.0] — 2026-10-14
 New-task button with folded form options; agent button labelled by action; wheel ships .mo catalogs.
 
