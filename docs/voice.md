@@ -43,10 +43,11 @@ it for every utterance, so English and German dictation both come out in the spo
 
 ## Models
 
-`/settings` -> *Plugins* -> *Voice input* card. It lists the installed models (pick one with the radio button,
-delete one with the trash button) and the catalog: Whisper's models (always shown, they cover every language),
-then Vosk's catalog, filtered to the UI language by default. *Download* fetches the model in the background; the
-card shows the progress and the model is selected once it is ready (first one installed becomes the default).
+`/settings` -> *Plugins* -> *Voice input* card. One table lists Whisper's models (always shown, they cover every
+language), then Vosk's catalog, filtered to the UI language by default; installed models always show (also those
+missing from the catalog). An installed row has a radio button to pick it and a trash button to delete it.
+*Download* fetches the model in the background; the card shows the progress and the model is selected once it is
+ready (first one installed becomes the default).
 
 - **Vosk**: ntasker streams the zip, verifies the catalog's MD5, unpacks and deletes the archive. Store:
   `platformdirs.user_data_dir("nTasker")/vosk-models/<name>` (Linux: `~/.local/share/nTasker/vosk-models/`).

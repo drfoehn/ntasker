@@ -1,8 +1,8 @@
-// Voice input card on /settings: installed models, catalog, background download.
+// Voice input card on /settings: one model table (catalog + installed), background download.
 //
 // A nested Alpine component inside settingsPage(). It talks to
 // /api/voice/models directly: picking a model writes the voice_model
-// setting, "Download" starts a server-side download and the card polls
+// setting (radio of an installed row), "Download" starts a server-side download and the card polls
 // the job until it is done, then refreshes the installed list. Deleting a
 // model offers an Undo while the server keeps it in its trash.
 
@@ -54,9 +54,13 @@ function voiceSettings() {
             return [...seen].map(([code, text]) => ({ code, text })).sort((a, b) => a.text.localeCompare(b.text));
         },
 
-        filtered() {
-            // Multilingual (Whisper) entries carry no language and always show.
-            return this.info.catalog.filter(m => !this.lang || !m.lang || m.lang === this.lang);
+        rows() {
+            // Multilingual (Whisper) entries carry no language and always show,
+            // installed models too -- also those missing from the catalog (offline).
+            const names = new Set(this.info.catalog.map(m => m.name));
+            const extra = this.info.installed.filter(m => !names.has(m.name));
+            return [...this.info.catalog, ...extra].filter(
+                m => !this.lang || !m.lang || m.lang === this.lang || this.isInstalled(m.name));
         },
 
         isInstalled(name) {

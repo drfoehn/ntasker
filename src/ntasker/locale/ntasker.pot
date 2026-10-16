@@ -6,9 +6,9 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: ntasker 3.16.1\n"
+"Project-Id-Version: ntasker 3.16.2\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-16 09:11+0200\n"
+"POT-Creation-Date: 2026-10-16 10:48+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -440,7 +440,7 @@ msgstr ""
 msgid "decision pending"
 msgstr ""
 
-#: src/ntasker/app.py:595 src/ntasker/plugins/voice/__init__.py:69
+#: src/ntasker/app.py:595
 msgid "in use"
 msgstr ""
 
@@ -1036,7 +1036,7 @@ msgstr ""
 msgid "#{a} now depends on #{b}."
 msgstr ""
 
-#: src/ntasker/app.py:753 src/ntasker/plugins/voice/__init__.py:90
+#: src/ntasker/app.py:753 src/ntasker/plugins/voice/__init__.py:88
 msgid "Undo"
 msgstr ""
 
@@ -1366,7 +1366,7 @@ msgid "Delete permanently"
 msgstr ""
 
 #: src/ntasker/app.py:863 src/ntasker/app.py:1094
-#: src/ntasker/plugins/voice/__init__.py:88
+#: src/ntasker/plugins/voice/__init__.py:86
 #: src/ntasker/templates/index.html:2478
 msgid "Delete"
 msgstr ""
@@ -3842,7 +3842,7 @@ msgstr ""
 msgid "UI libraries"
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:79 src/ntasker/settings.py:790
+#: src/ntasker/plugins/voice/__init__.py:77 src/ntasker/settings.py:790
 msgid "Language"
 msgstr ""
 
@@ -4372,7 +4372,7 @@ msgid "Listening..."
 msgstr ""
 
 #: src/ntasker/plugins/voice/__init__.py:58
-#: src/ntasker/plugins/voice/routes.py:291
+#: src/ntasker/plugins/voice/routes.py:294
 msgid "Loading the speech model..."
 msgstr ""
 
@@ -4396,22 +4396,18 @@ msgid ""
 msgstr ""
 
 #: src/ntasker/plugins/voice/__init__.py:67
-msgid "Installed models"
+msgid "Speech models"
 msgstr ""
 
 #: src/ntasker/plugins/voice/__init__.py:68
 msgid "No model installed yet -- download one below."
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:70
+#: src/ntasker/plugins/voice/__init__.py:69
 msgid "Use"
 msgstr ""
 
 #: src/ntasker/plugins/voice/__init__.py:71
-msgid "Download a model"
-msgstr ""
-
-#: src/ntasker/plugins/voice/__init__.py:73
 #, python-brace-format
 msgid ""
 "Whisper models understand every language and punctuate by themselves, but"
@@ -4420,53 +4416,53 @@ msgid ""
 " downloads in the background into {dir}."
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:78
+#: src/ntasker/plugins/voice/__init__.py:76
 #, python-brace-format
 msgid "The catalog could not be loaded: {detail}"
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:80
+#: src/ntasker/plugins/voice/__init__.py:78
 msgid "All languages"
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:81
+#: src/ntasker/plugins/voice/__init__.py:79
 msgid "Download"
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:82
+#: src/ntasker/plugins/voice/__init__.py:80
 #, python-brace-format
 msgid "Downloading {name}..."
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:83
+#: src/ntasker/plugins/voice/__init__.py:81
 #, python-brace-format
 msgid "Unpacking {name}..."
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:84
+#: src/ntasker/plugins/voice/__init__.py:82
 #, python-brace-format
 msgid "{name} is ready."
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:85
+#: src/ntasker/plugins/voice/__init__.py:83
 #, python-brace-format
 msgid "Download failed: {detail}"
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:86
+#: src/ntasker/plugins/voice/__init__.py:84
 msgid "small"
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:87
+#: src/ntasker/plugins/voice/__init__.py:85
 msgid "big"
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:89
+#: src/ntasker/plugins/voice/__init__.py:87
 #, python-brace-format
 msgid "{name} deleted."
 msgstr ""
 
-#: src/ntasker/plugins/voice/__init__.py:100
+#: src/ntasker/plugins/voice/__init__.py:98
 msgid ""
 "Speech model for dictation: the name of a model installed on the Voice "
 "input card below, or the path of an unpacked Vosk or faster-whisper model"
@@ -4483,22 +4479,22 @@ msgstr ""
 msgid "{name} is still downloading."
 msgstr ""
 
-#: src/ntasker/plugins/voice/routes.py:237
-#: src/ntasker/plugins/voice/routes.py:250
+#: src/ntasker/plugins/voice/routes.py:240
+#: src/ntasker/plugins/voice/routes.py:253
 #, python-brace-format
 msgid "Unknown model {name!r}."
 msgstr ""
 
-#: src/ntasker/plugins/voice/routes.py:264
+#: src/ntasker/plugins/voice/routes.py:267
 #, python-brace-format
 msgid "{name} can no longer be restored."
 msgstr ""
 
-#: src/ntasker/plugins/voice/routes.py:281
+#: src/ntasker/plugins/voice/routes.py:284
 msgid "no speech model installed -- pick one in the settings"
 msgstr ""
 
-#: src/ntasker/plugins/voice/routes.py:288
+#: src/ntasker/plugins/voice/routes.py:291
 #, python-brace-format
 msgid "the {package} package is missing -- run `ntasker enable voice`"
 msgstr ""

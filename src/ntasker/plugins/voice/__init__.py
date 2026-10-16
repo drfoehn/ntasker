@@ -64,11 +64,9 @@ def _js_strings() -> dict[str, str]:
         "voice_engine_missing": _(
             "A speech recognition package is not installed -- use the install button above."
         ),
-        "voice_installed": _("Installed models"),
+        "voice_installed": _("Speech models"),
         "voice_none_installed": _("No model installed yet -- download one below."),
-        "voice_in_use": _("in use"),
         "voice_use": _("Use"),
-        "voice_catalog": _("Download a model"),
         "voice_catalog_intro": _(
             "Whisper models understand every language and punctuate by themselves, "
             "but need more CPU; Vosk models are per language and answer instantly. "

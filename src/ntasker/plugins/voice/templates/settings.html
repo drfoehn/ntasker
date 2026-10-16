@@ -16,39 +16,11 @@
 
         <div class="text-secondary small mb-3" x-show="loaded && !info.installed.length"
              x-text="$i18n('voice_none_installed')"></div>
-        <div class="mb-3">
-            <template x-for="m in info.installed" :key="m.name">
-                <div class="d-flex align-items-center">
-                    <label class="form-check mb-1">
-                        <input class="form-check-input" type="radio" name="voice-model"
-                               :checked="m.name === info.current" @change="use(m.name)">
-                        <span class="form-check-label">
-                            <code x-text="m.name"></code>
-                            <span class="badge bg-green-lt ms-2" x-show="m.name === info.current"
-                                  x-text="$i18n('voice_in_use')"></span>
-                        </span>
-                    </label>
-                    <button type="button" class="btn btn-sm btn-ghost-danger btn-icon ms-auto"
-                            :title="$i18n('voice_delete')" :aria-label="$i18n('voice_delete')"
-                            @click="remove(m.name)">
-                        <i class="ti ti-trash"></i>
-                    </button>
-                </div>
-            </template>
-            <div class="small text-secondary mt-1" x-show="deleted" x-cloak>
-                <span x-text="deleted && $i18n('voice_deleted', { name: deleted.name })"></span>
-                <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" @click="restore()"
-                        x-text="$i18n('voice_undo')"></button>
-            </div>
-        </div>
-        <div class="invalid-feedback d-block mb-2" x-show="error" x-text="error"></div>
-
-        <h4 class="mb-2" x-text="$i18n('voice_catalog')"></h4>
         <template x-if="info.catalog_error">
             <div class="text-danger small mb-2"
                  x-text="$i18n('voice_catalog_offline', { detail: info.catalog_error })"></div>
         </template>
-        <div class="d-flex align-items-center gap-2 mb-2" x-show="info.catalog.length">
+        <div class="d-flex align-items-center gap-2 mb-2" x-show="languages().length">
             <label class="form-label mb-0" x-text="$i18n('voice_language')"></label>
             <select class="form-select form-select-sm w-auto" x-model="lang">
                 <option value="" x-text="$i18n('voice_all_languages')"></option>
@@ -63,21 +35,38 @@
         </div>
         <div class="small mb-2" x-show="job" x-text="jobText()"
              :class="job && job.state === 'error' ? 'text-danger' : 'text-secondary'"></div>
-        <div class="table-responsive" x-show="info.catalog.length">
+        <div class="small text-secondary mb-2" x-show="deleted" x-cloak>
+            <span x-text="deleted && $i18n('voice_deleted', { name: deleted.name })"></span>
+            <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" @click="restore()"
+                    x-text="$i18n('voice_undo')"></button>
+        </div>
+        <div class="invalid-feedback d-block mb-2" x-show="error" x-text="error"></div>
+        <div class="table-responsive" x-show="rows().length">
             <table class="table table-sm table-vcenter mb-0">
                 <tbody>
-                    <template x-for="m in filtered()" :key="m.name">
+                    <template x-for="m in rows()" :key="m.name">
                         <tr>
-                            <td x-text="m.lang_text"></td>
-                            <td><code x-text="m.name"></code></td>
+                            <td class="w-1">
+                                <input class="form-check-input m-0" type="radio" name="voice-model"
+                                       x-show="isInstalled(m.name)" :checked="m.name === info.current"
+                                       :title="$i18n('voice_use')" :aria-label="$i18n('voice_use')"
+                                       @change="use(m.name)">
+                            </td>
+                            <td>
+                                <code class="text-nowrap" x-text="m.name"></code>
+                                <div class="small text-secondary"
+                                     x-text="[m.lang_text, m.size_text].filter(Boolean).join(' · ')"></div>
+                            </td>
                             <td><span class="badge bg-secondary-lt" x-text="m.engine === 'whisper' ? 'Whisper' : 'Vosk'"></span></td>
                             <td><span class="badge" :class="m.type === 'small' ? 'bg-blue-lt' : 'bg-purple-lt'"
                                       x-text="m.type === 'small' ? $i18n('voice_type_small') : $i18n('voice_type_big')"></span></td>
-                            <td class="text-secondary" x-text="m.size_text"></td>
-                            <td class="text-end">
-                                <span class="badge bg-green-lt" x-show="isInstalled(m.name)"
-                                      x-text="$i18n('voice_in_use')" x-cloak
-                                      :class="m.name === info.current ? '' : 'd-none'"></span>
+                            <td class="text-end text-nowrap">
+                                <button type="button" class="btn btn-sm btn-ghost-danger btn-icon"
+                                        x-show="isInstalled(m.name)"
+                                        :title="$i18n('voice_delete')" :aria-label="$i18n('voice_delete')"
+                                        @click="remove(m.name)">
+                                    <i class="ti ti-trash"></i>
+                                </button>
                                 <button type="button" class="btn btn-sm btn-outline-primary"
                                         x-show="!isInstalled(m.name)" :disabled="busy()"
                                         @click="download(m.name)">
