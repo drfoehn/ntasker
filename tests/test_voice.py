@@ -549,13 +549,13 @@ def test_ws_whisper_partial_on_speech_final_on_pause(client, store, monkeypatch)
         ws.send_text("final")
         assert ws.receive_json() == {"type": "final", "text": "Ende."}
     assert calls["loaded"] == [str(store.dir.parent / "whisper-models" / "whisper-tiny")]
-    assert calls["beams"] == [1, 5, 5] and calls["language"] == "de"
+    assert calls["beams"] == [1, 5, 5] and calls["language"] is None  # auto-detect, not the UI language
 
 
 def test_whisper_recognizer_ignores_silence(monkeypatch):
     pytest.importorskip("numpy")
     calls = _fake_whisper(monkeypatch, [])
-    rec = voice_routes.WhisperRecognizer(sys.modules["faster_whisper"].WhisperModel("m"), None)
+    rec = voice_routes.WhisperRecognizer(sys.modules["faster_whisper"].WhisperModel("m"))
     for _ in range(50):
         assert rec.accept(b"\x00" * 3200) is None
     assert len(rec.buf) <= int(rec.LEAD_IN * voice_routes.SAMPLE_RATE) * 2

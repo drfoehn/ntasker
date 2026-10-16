@@ -139,7 +139,11 @@ class VoskRecognizer:
 
 
 class WhisperRecognizer:
-    """Utterance-wise Whisper on top of a simple level gate (see module doc)."""
+    """Utterance-wise Whisper on top of a simple level gate (see module doc).
+
+    The language is never pinned: Whisper detects it per utterance, so
+    English and German dictation both come out in the spoken language.
+    """
 
     LEVEL = 300  # int16 RMS above which a chunk counts as speech
     LEAD_IN = 0.3  # seconds of silence kept before the first word
@@ -147,9 +151,8 @@ class WhisperRecognizer:
     MAX = 25.0  # seconds -- Whisper's window is 30
     PARTIAL_EVERY = 1.0  # seconds of new speech before the next partial
 
-    def __init__(self, model: Any, lang: str | None) -> None:
+    def __init__(self, model: Any) -> None:
         self.model = model
-        self.lang = lang
         self._reset()
 
     def _reset(self) -> None:
@@ -167,7 +170,7 @@ class WhisperRecognizer:
         audio = np.frombuffer(bytes(self.buf), dtype=np.int16).astype(np.float32) / 32768.0
         segments, _info = self.model.transcribe(
             audio,
-            language=self.lang,
+            language=None,  # auto-detect
             beam_size=beam_size,
             vad_filter=True,  # no hallucinated text for breath and noise
             condition_on_previous_text=False,
@@ -294,11 +297,10 @@ async def voice_ws(websocket: WebSocket) -> None:
     except Exception as exc:  # noqa: BLE001 -- surface any load failure to the user
         await _fail(websocket, "load_failed", str(exc))
         return
-    lang = language_of(path.name) or ui_language()
     if engine == "whisper":
-        rec: VoskRecognizer | WhisperRecognizer = WhisperRecognizer(model, lang if lang != "auto" else None)
+        rec: VoskRecognizer | WhisperRecognizer = WhisperRecognizer(model)
     else:
-        rec = VoskRecognizer(model, lang)
+        rec = VoskRecognizer(model, language_of(path.name) or ui_language())
 
     await websocket.send_json({"type": "status", "text": ""})
     try:

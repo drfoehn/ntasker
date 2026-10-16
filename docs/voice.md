@@ -38,8 +38,8 @@ Whisper runs on the CPU with int8 weights (`device="cpu"`, `compute_type="int8"`
 while the microphone level says someone speaks, the audio is buffered; a pause of 0.7 s (or 25 s of speech)
 transcribes it and appends the text. During speech the buffer is re-transcribed for the grey hypothesis -- after at
 least 1 s of new audio, and the slower the model, the rarer (twice the time the last pass took). Its silence filter
-(`vad_filter`) keeps breath and noise from turning into invented text. The language comes from the `language`
-setting (`de`/`en`); with `auto` Whisper detects it itself.
+(`vad_filter`) keeps breath and noise from turning into invented text. The language is never pinned: Whisper detects
+it for every utterance, so English and German dictation both come out in the spoken language.
 
 ## Models
 
