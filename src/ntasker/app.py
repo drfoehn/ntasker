@@ -561,8 +561,6 @@ def build_js_strings() -> dict[str, str]:
         "queue_running_hint": _("Running one task per project, top down."),
         "queue_position": _("Position {n} in the queue"),
         "queue_remove": _("Remove from queue"),
-        "queue_item_running": _("Running"),
-        "queue_item_waiting": _("Waiting for your input"),
         "queue_badge": _("Queued at position {n}"),
         "queue_blocked": _("Skipped while a dependency is still open."),
         "queue_agent_missing": _("Skipped -- this task's agent is not installed."),

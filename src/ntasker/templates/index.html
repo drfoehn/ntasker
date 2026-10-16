@@ -254,6 +254,26 @@
                 </template>
             </label>
 {% endmacro %}
+{# The labelled agent run button (Start / Watch / Reply / Check / External) for #}
+{# the Alpine variable `t` -- shared by the task row, the board card and the queue. #}
+{% macro run_button(t, b) %}
+                    <button class="{{ b }} btn-claude btn-claude-labeled" @click.stop="runNext({{ t }})"
+                            :disabled="runButtonState({{ t }}) === 'external' || ({{ t }}.draft && !taskRunPhase({{ t }}.id))"
+                            :class="{'btn-claude-waiting': runButtonState({{ t }}) === 'answer', 'btn-claude-review': runButtonState({{ t }}) === 'review'}"
+                            :aria-label="runButtonTitle({{ t }})" :title="runButtonTitle({{ t }})">
+                        <template x-if="['view', 'external'].includes(runButtonState({{ t }}))"><span class="spinner-border spinner-border-sm me-1"></span></template>
+                        <i class="ti me-1" x-show="!['view', 'external'].includes(runButtonState({{ t }}))"
+                           :class="{start: 'ti-player-play', answer: 'ti-help', review: 'ti-eye'}[runButtonState({{ t }})]"></i>
+                        <span x-text="$i18n('claude_state_' + runButtonState({{ t }}))"></span>
+                    </button>
+{% endmacro %}
+{# The agent logo right of a task's #id: which agent starts / runs the task. #}
+{% macro agent_badge(t) %}
+                <template x-if="agentIconUrl({{ t }})">
+                    <img :src="agentIconUrl({{ t }})" class="claude-logo-icon task-id-agent flex-shrink-0" alt=""
+                         :title="agentLabel(taskAgentKey({{ t }}))">
+                </template>
+{% endmacro %}
 {# Action slots of a task row / board card -- the same three everywhere: the #}
 {# agent button (resume when the task already has a session, else run), edit, #}
 {# and a "..." menu with everything else. `compact` is the tighter board form. #}
@@ -271,15 +291,7 @@
                 {# Run -- only when the agent CLI + a PTY are available. A live #}
                 {# session turns it into the way into that session (runNext switches). #}
                 <template x-if="!canResumeOpen(task) && taskRunnable(task) && task.status !== 'done'">
-                    <button class="{{ b }} btn-claude btn-claude-labeled" @click.stop="runNext(task)"
-                            :disabled="runButtonState(task) === 'external' || (task.draft && !taskRunPhase(task.id))"
-                            :class="{'btn-claude-waiting': runButtonState(task) === 'answer', 'btn-claude-review': runButtonState(task) === 'review'}"
-                            :aria-label="runButtonTitle(task)" :title="runButtonTitle(task)">
-                        <template x-if="['view', 'external'].includes(runButtonState(task))"><span class="spinner-border spinner-border-sm me-1"></span></template>
-                        <i class="ti me-1" x-show="!['view', 'external'].includes(runButtonState(task))"
-                           :class="{start: 'ti-player-play', answer: 'ti-help', review: 'ti-eye'}[runButtonState(task)]"></i>
-                        <span x-text="$i18n('claude_state_' + runButtonState(task))"></span>
-                    </button>
+{{ run_button('task', b) }}
                 </template>
                 {# Agent CLI not installed: greyed-out logo in a non-clickable box, so #}
                 {# you still see which agent the task uses and the slot keeps its width. #}
@@ -1436,6 +1448,7 @@
                                       :title="$i18n('click_to_copy_id', {id: item.id})"
                                       @click.stop="copyId(item.id)"
                                       x-text="`#${item.id}`"></span>
+{{ agent_badge('item') }}
 
                                 <i class="ti ti-bolt text-teal flex-shrink-0" x-show="item.fasttrack"
                                    :title="$i18n('fasttrack_badge')"></i>
@@ -1470,29 +1483,9 @@
                                             <i class="ti ti-player-track-next fs-3"></i>
                                         </button>
                                     </template>
-                                    <template x-if="taskRunPhase(item.id) === 'running'">
-                                        <a :href="'#/run/' + item.id" class="btn btn-sm btn-ghost-secondary task-queue-state-btn d-flex align-items-center"
-                                           :title="$i18n('claude_switch_session')">
-                                            <span class="spinner-border spinner-border-sm me-1"></span>
-                                            <img :src="agentIconUrl(item)" class="claude-logo-icon me-1" alt="">
-                                            <span x-text="$i18n('queue_item_running')"></span>
-                                        </a>
-                                    </template>
-                                    <template x-if="taskRunPhase(item.id) === 'waiting'">
-                                        <a :href="'#/run/' + item.id" class="btn btn-sm btn-ghost-orange task-queue-state-btn d-flex align-items-center"
-                                           :title="$i18n('claude_waiting')">
-                                            <i class="ti ti-help fs-3 me-1"></i>
-                                            <img :src="agentIconUrl(item)" class="claude-logo-icon me-1" alt="">
-                                            <span x-text="$i18n('queue_item_waiting')"></span>
-                                        </a>
-                                    </template>
-                                    {# Adopted terminal session: running, but nothing to attach to. #}
-                                    <template x-if="taskRunPhase(item.id) === 'external'">
-                                        <span class="d-flex align-items-center px-2" :title="$i18n('claude_external')">
-                                            <span class="spinner-border spinner-border-sm me-1"></span>
-                                            <i class="ti ti-terminal-2 me-1"></i>
-                                            <span x-text="$i18n('queue_item_running')"></span>
-                                        </span>
+                                    {# Live entry: the same run button as on the task row / board card. #}
+                                    <template x-if="taskRunPhase(item.id)">
+{{ run_button('item', 'btn btn-sm px-1 py-0') }}
                                     </template>
                                 </span>
 
@@ -1660,6 +1653,7 @@
                                                   :title="$i18n('click_to_copy_id', {id: task.id})"
                                                   @click.stop="copyId(task.id)"
                                                   x-text="`#${task.id}`"></span>
+{{ agent_badge('task') }}
 
                                             <strong class="task-title"
                                                     x-text="task.title"
@@ -1926,6 +1920,7 @@
                                                       :title="$i18n('click_to_copy_id', {id: task.id})"
                                                       @click.stop="copyId(task.id)"
                                                       x-text="`#${task.id}`"></span>
+{{ agent_badge('task') }}
                                                 <div class="kanban-card-actions">
 {{ task_actions(compact=true) }}
                                                 </div>

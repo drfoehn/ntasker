@@ -494,10 +494,10 @@ body {
     min-width: 0;
 }
 @container (max-width: 20rem) {
-    .task-queue-state-btn > span:last-child {
+    .task-queue-state .btn-claude-labeled > span:last-child {
         display: none;
     }
-    .task-queue-state-btn > img.me-1 {
+    .task-queue-state .btn-claude-labeled > .me-1 {
         margin-right: 0 !important;
     }
 }
@@ -620,10 +620,7 @@ body {
 .task-queue-blocker {
     flex: 0 0 auto;
 }
-.task-queue-item-running .task-queue-state .spinner-border {
-    color: var(--tblr-indigo);
-}
-/* Running / Waiting entry: a ghost button, so "click to open the session" is
+/* Resume / start-now entry: a ghost button, so "click to act on the entry" is
  * recognisable -- the border only shows on hover, keeping the row quiet. */
 .task-queue-state-btn,
 .task-queue-state-btn:focus {
@@ -637,10 +634,6 @@ body {
     color: inherit;
     border-color: var(--tblr-border-color);
     background-color: var(--tblr-bg-surface-secondary);
-}
-.btn-ghost-orange.task-queue-state-btn:hover,
-.btn-ghost-orange.task-queue-state-btn:focus-visible {
-    color: var(--tblr-orange);
 }
 
 /* ---------------- Claude run view ----------------
@@ -1104,6 +1097,11 @@ span.task-activity {
     border-radius: 4px;
     display: block;
     object-fit: cover;
+}
+/* The agent logo next to a task's #id badge -- scaled to the badge height. */
+.task-id-agent {
+    height: 1rem;
+    width: 1rem;
 }
 /* Resume button: the agent logo with a small "rotate" glyph badged onto its
  * bottom-right corner, distinguishing "reopen the finished session" from the
