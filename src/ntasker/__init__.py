@@ -7,6 +7,6 @@ in ``pyproject.toml`` and dispatches to :mod:`ntasker.cli`.
 
 from __future__ import annotations
 
-__version__ = "3.16.1"
+__version__ = "3.16.2"
 
 __all__ = ["__version__"]

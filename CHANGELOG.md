@@ -4,6 +4,9 @@ All notable changes to ntasker.
 
 Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
+## [3.16.2] — 2026-10-16
+Queue: run button on the task card; agent logo next to the task id.
+
 ## [3.16.1] — 2026-10-16
 Self-update: local uv tool installs switch to PyPI; editable installs reinstall from their checkout.
 
