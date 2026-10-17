@@ -90,6 +90,8 @@ Trigger: the user explicitly asks for it ("committe als v2.5.0", "bump version")
    git -C path/to/ntasker/ntasker add <files>
    git -C path/to/ntasker/ntasker commit -m "release: v<x.y.z> -- <one-liner>"
    git -C path/to/ntasker/ntasker tag -a v<x.y.z> -m "v<x.y.z>"
+   git -C path/to/ntasker/ntasker push origin main
+   git -C path/to/ntasker/ntasker push origin v<x.y.z>
    ```
 
 SemVer: **PATCH** = bugfix, **MINOR** = feature (no breaking change), **MAJOR** = breaking change.
@@ -100,6 +102,7 @@ SemVer: **PATCH** = bugfix, **MINOR** = feature (no breaking change), **MAJOR** 
 - Never `git config`, `git commit --amend`, `git rebase -i`.
 - Never `cd path/to/ntasker/ntasker && git ...` -- permission pattern only matches `-C` form.
 - `git push` to GitHub is allowed but **only on user's explicit OK** (Memory `feedback_tracker_repo_commits`).
+  A release request ("mach ein Release") is that OK: push `main` + the new tag as the release's last step.
 
 ## Skill crosslink
 
