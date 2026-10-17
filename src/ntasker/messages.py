@@ -19,8 +19,8 @@ them (see ``docs/messaging.md``):
   - anyone can read their task's messages with ``ntasker inbox``.
 
 ntasker writes messages of its own on events: a task that others depend on
-reaches ``review`` / ``done`` (:func:`notify_finished`), or releases a
-directory lock (:func:`notify_lock_released`). Only *live* dependents are
+reaches ``review`` / ``done`` (:func:`notify_finished` -- ``done`` also frees
+its own project directory), or releases a directory lock (:func:`notify_lock_released`). Only *live* dependents are
 told -- a task that has not started yet sees its dependencies' results in its
 seed anyway.
 
@@ -168,25 +168,47 @@ def _live_dependents(conn: sqlite3.Connection, task_id: int) -> list[int]:
 def notify_finished(conn: sqlite3.Connection, task_id: int, state: str) -> list[int]:
     """``task_id`` reached ``state`` (``review`` / ``done``): wake its live dependents.
 
-    One ``unblocked`` message per dependent and finished task -- a task moving
-    on from review to done does not wake anyone twice. Returns the message ids.
+    One ``unblocked`` message per dependent and finished task. A task in review
+    still holds its own project directory while its session lives (see
+    :func:`ntasker.locks.held_dirs`), so the review message says so, and the
+    later ``done`` sends one ``lock`` message: the project lock is free now.
+    Returns the message ids.
     """
-    row = conn.execute("SELECT title, report FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    row = conn.execute("SELECT title, report, project FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if row is None:
         return []
+    project = row["project"]
     summary = next((ln.strip("# ").strip() for ln in (row["report"] or "").splitlines() if ln.strip()), "")
     ids = []
     for dep in _live_dependents(conn, task_id):
         told = conn.execute(
-            "SELECT 1 FROM messages WHERE from_task = ? AND to_task = ? AND kind = 'unblocked'",
+            "SELECT id FROM messages WHERE from_task = ? AND to_task = ? AND kind = 'unblocked' "
+            "ORDER BY id DESC LIMIT 1",
             (task_id, dep),
         ).fetchone()
         if told:
+            if state == "done" and project and not conn.execute(
+                "SELECT 1 FROM messages WHERE from_task = ? AND to_task = ? AND kind = 'lock' AND id > ?",
+                (task_id, dep, told["id"]),
+            ).fetchone():
+                text = (
+                    f"Task #{task_id} {row['title']} is done -- its lock on {project} is released. "
+                    "Continue your work."
+                )
+                ids.append(post(conn, dep, text, kind="lock", from_task=task_id))
             continue
         text = f"Task #{task_id} {row['title']} is finished ({state}) -- your dependency on it is resolved."
         if summary:
             text += f"\nIts report starts: {summary[:300]}"
-        text += f"\nFull report: `ntasker show {task_id}`. Continue your work."
+        text += f"\nFull report: `ntasker show {task_id}`."
+        if state == "review" and project and task_id in live_task_ids():
+            text += (
+                f"\nIts project directory {project} stays locked until #{task_id} is done -- "
+                f"if you need {project}, wait idle: you get another message once it is released. "
+                "Otherwise continue your work."
+            )
+        else:
+            text += " Continue your work."
         ids.append(post(conn, dep, text, kind="unblocked", from_task=task_id))
     return ids
 

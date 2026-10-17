@@ -55,10 +55,13 @@ yet sees its dependencies' outcomes in its seed anyway):
 | Kind | When |
 |---|---|
 | `unblocked` | A task reaches `review` (`ntasker finish --status ok`) or `done`; once per dependent |
-| `lock` | Locks released without finishing: `ntasker lock rm`, `finish --status failed` / `blocked` |
+| `lock` | `ntasker lock rm`, `finish --status failed` / `blocked`; a task in review becomes `done` |
 
-An `unblocked` message carries the first line of the finished task's report; review followed by done wakes nobody
-twice.
+An `unblocked` message carries the first line of the finished task's report. A task in review keeps its own project
+directory while its session lives, so the review message says so: a dependent that needs that directory waits idle.
+Once the task is `done`, the dependent gets one `lock` message (*its lock on X is released*) and continues. Done
+directly, without review, sends the `unblocked` message only. `done` is noticed on every path: the API (board, PATCH)
+sends right away, `ntasker done` (a direct DB write) is caught by the queue worker's sweep on its next tick.
 
 ## The "wait for another task" flow
 
@@ -67,7 +70,8 @@ twice.
 3. B gets the `wait` message. Once B's work is done **and** B may commit, it commits and runs `ntasker finish` -- that
    releases its locks and moves it to review. If something is still open with the user, B releases nothing, tells A
    once that it waits for the user, and waits.
-4. The `unblocked` message wakes A, which continues.
+4. The `unblocked` message wakes A, which continues. If A needs B's own project directory, A waits further: that
+   stays locked until B is `done`, and the `lock` message then wakes A again.
 
 ## Rules for the agents
 

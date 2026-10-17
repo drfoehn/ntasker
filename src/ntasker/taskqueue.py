@@ -444,24 +444,31 @@ def skipped(rows: list[sqlite3.Row], live: set[int]) -> dict[int, dict]:
     return out
 
 
-def _kill_done(live: set[int]) -> None:
-    """Stop every live session whose task is done.
+def _kill_done(live: set[int], external: set[int]) -> None:
+    """Stop every live session whose task is done, and tell who waits for it.
 
     The DB is the single source of truth and the status can flip in another
     process (``ntasker done`` run inside the session, a direct DB write), so
     the worker sweeps rather than relying on the API path alone. The PATCH
     handler still stops synchronously so the UI does not have to wait a tick.
+    A done task gives its project directory back, so its live dependents are
+    told (:func:`ntasker.messages.notify_finished`, idempotent) -- also for an
+    external session, which is not killed here.
     """
-    if not live:
+    ids = live | external
+    if not ids:
         return
-    placeholders = ",".join("?" * len(live))
+    placeholders = ",".join("?" * len(ids))
     with get_conn() as conn:
         rows = conn.execute(
             f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'done'",
-            list(live),
+            list(ids),
         ).fetchall()
+        for r in rows:
+            messages.notify_finished(conn, int(r["id"]), "done")
     for r in rows:
-        stop_session(int(r["id"]))
+        if int(r["id"]) in live:
+            stop_session(int(r["id"]))
 
 
 def tick() -> None:
@@ -476,7 +483,7 @@ def tick() -> None:
     enabled = get_queue_enabled()
     live = set(active_session_ids())
     external = set(external_session_ids())
-    _kill_done(live)
+    _kill_done(live, external)
     worktrees.sweep(live | external)
     rows = load_queue()
     queued_ids = {int(r["id"]) for r in rows}

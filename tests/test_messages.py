@@ -108,11 +108,44 @@ def test_finishing_wakes_live_dependents_once(env):
     claude_runner.register_external(a, os.getpid())
     env.patch(f"/api/tasks/{b}", json={"report": "## Done\nAll good"})
     env.patch(f"/api/tasks/{b}", json={"phase": "review"})
-    env.patch(f"/api/tasks/{b}", json={"status": "done"})
+    env.patch(f"/api/tasks/{b}", json={"phase": "review"})
     (msg,) = _rows(a)
     assert msg["kind"] == "unblocked" and f"#{b} Holder is finished (review)" in msg["body"]
     assert "Done" in msg["body"]
     assert _rows(idle) == []
+
+
+def test_done_after_review_releases_the_project_lock(env, monkeypatch):
+    monkeypatch.setattr("ntasker.app.stop_session", lambda tid: None)  # the fake session is pytest itself
+    a, b = _add("Waiter"), _add("Holder", project="thrito")
+    env.post(f"/api/tasks/{a}/wait", json={"on": b})
+    claude_runner.register_external(a, os.getpid())
+    _spawned(b)
+    env.patch(f"/api/tasks/{b}", json={"phase": "review"})
+    (review,) = _rows(a)
+    assert "thrito stays locked" in review["body"]
+    env.patch(f"/api/tasks/{b}", json={"status": "done"})
+    env.patch(f"/api/tasks/{b}", json={"status": "done"})
+    assert [m["kind"] for m in _rows(a)] == ["unblocked", "lock"]
+    assert "lock on thrito is released" in _rows(a)[1]["body"]
+
+
+def test_cli_done_is_noticed_by_the_queue_sweep(env, monkeypatch):
+    from ntasker import taskqueue
+
+    a, b = _add("Waiter"), _add("Holder", project="thrito")
+    env.post(f"/api/tasks/{a}/wait", json={"on": b})
+    claude_runner.register_external(a, os.getpid())
+    _spawned(b)
+    env.patch(f"/api/tasks/{b}", json={"phase": "review"})
+    with get_conn() as conn:  # ``ntasker done`` writes the DB directly
+        conn.execute("UPDATE tasks SET status = 'done' WHERE id = ?", (b,))
+    stopped = []
+    monkeypatch.setattr(taskqueue, "stop_session", stopped.append)
+    taskqueue._kill_done({b}, {a})
+    taskqueue._kill_done({b}, {a})
+    assert stopped == [b, b]
+    assert [m["kind"] for m in _rows(a)] == ["unblocked", "lock"]
 
 
 def test_finish_without_success_reports_released_locks(env):

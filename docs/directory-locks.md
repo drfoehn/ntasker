@@ -59,7 +59,9 @@ directories. Nothing is notified: the worker re-reads the queue from scratch eac
 
 The task's **own** project directory is not a lock but a property of the task, so it is never cleared this way. It
 stays held while the session lives -- which is what keeps the lane busy during your review -- and stops counting once
-the task is `done` or the session is gone (`held_dirs`).
+the task is `done` or the session is gone (`held_dirs`). Running sessions that wait for the task (`ntasker wait-for`)
+are told when it goes to review that the directory stays locked, and get a second message once the task is `done` --
+see [messaging.md](messaging.md#events).
 
 A resumed run that needs a released directory again takes it with `ntasker lock add <id> <project>`, and is refused if
 someone else holds it by then. Manual release stays available: `ntasker lock rm`, `DELETE /api/tasks/<id>/locks/<p>`,
