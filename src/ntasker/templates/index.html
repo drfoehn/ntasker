@@ -1347,10 +1347,12 @@
                                   x-text="worktreesPending() || worktrees.length"></span>
                         </button>
                         {# Carry on with a conversation started in a terminal. #}
-                        <button type="button" class="btn btn-sm btn-ghost-secondary btn-icon"
-                                @click="openSessionPicker()"
-                                :title="$i18n('session_pickup')" :aria-label="$i18n('session_pickup')">
-                            <i class="ti ti-terminal-2 fs-3"></i>
+                        <button type="button" class="btn btn-sm btn-ghost-secondary"
+                                @click="openSessionPicker()" :title="$i18n('session_pickup_title')"
+                                :aria-label="$i18n('session_pickup')">
+                            {# Label only from sm up -- on a phone the header is already full. #}
+                            <i class="ti ti-terminal-2 me-sm-1 fs-3"></i>
+                            <span class="d-none d-sm-inline" x-text="$i18n('session_pickup')"></span>
                         </button>
                         {# The two queue-wide controls, pushed right as one block #}
                         {# so they stay together whether or not the planner shows. #}
