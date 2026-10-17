@@ -180,13 +180,18 @@ RUN_RULES_DEFAULT = """\
   Then stop and wait. This session stays open; the user reviews the
   task here and closes it. The next queued task in this project only
   starts once this task is done -- so never finish on a guess.
-- If the user asks for more after the hand-over, do it, then run the
-  same `ntasker finish {id}` command again with the report rewritten
-  to cover that work too -- the user reads the report, not the chat.
-- If you cannot finish (blocker, missing info, a decision only the
-  user can make): `ntasker finish {id} --status failed` (or
-  `--status blocked` when the blocker is outside this task) with the
-  same kind of report on stdin, then stop. The task keeps its phase.
+- Write the report only once the work -- or a self-contained part of
+  it -- is done. While a question to the user is open, the task is not
+  done: ask in the chat and wait, without a report and without
+  `ntasker finish`.
+- If the user asks for more after the hand-over, do it; once that work
+  is done, run the same `ntasker finish {id}` command again with the
+  report rewritten to cover it too -- the user reads the report, not
+  the chat. Answering or asking a question needs no new report.
+- If you cannot finish (a blocker no answer from the user resolves):
+  `ntasker finish {id} --status failed` (or `--status blocked` when the
+  blocker is outside this task) with the same kind of report on stdin,
+  then stop. The task keeps its phase.
 - Never set status=done or archive on your own initiative -- only when
   the user or the task description explicitly tells you to (then:
   finish, commit if asked, then `ntasker done {id}` as the very last
@@ -209,10 +214,13 @@ RUN_RULES_NO_REPORT_DEFAULT = """\
   Then stop and wait. This session stays open; the user reviews the
   task here and closes it. The next queued task in this project only
   starts once this task is done -- so never finish on a guess.
-- If the user asks for more after the hand-over, do it, then run the
-  same `ntasker finish {id}` command again with an updated summary.
-- If you cannot finish (blocker, missing info, a decision only the
-  user can make): `ntasker finish {id} --status failed` (or
+- While a question to the user is open, the task is not done: ask in
+  the chat and wait, without `ntasker finish`.
+- If the user asks for more after the hand-over, do it; once that work
+  is done, run the same `ntasker finish {id}` command again with an
+  updated summary. Answering or asking a question needs no new finish.
+- If you cannot finish (a blocker no answer from the user resolves):
+  `ntasker finish {id} --status failed` (or
   `--status blocked` when the blocker is outside this task) with the
   reason as summary, then stop. The task keeps its phase.
 - Never set status=done or archive on your own initiative -- only when
