@@ -104,3 +104,24 @@ def test_run_rules_rejects_empty(db):
 
     with pytest.raises(ValueError):
         set_setting("claude_run_rules", "   ")
+
+
+def test_seed_hand_over_in_ui_language(db, monkeypatch):
+    import contextvars
+
+    from ntasker import i18n
+    from ntasker.settings import delete_setting, set_setting
+
+    # No request / CLI context: the language comes from the setting, as in
+    # the queue's background thread (CLI tests leave a language behind).
+    monkeypatch.setattr(i18n, "_active_language", contextvars.ContextVar("t", default=None))
+
+    task = {"id": 9, "title": "t", "status": "open", "priority": "normal"}
+    assert "## Language" not in queue_seed_for_task(task)
+    set_setting("language", "de")
+    seed = queue_seed_for_task(task)
+    assert "report, headings included -- in German." in seed
+    assert seed.index("## Language") < seed.index("## Tracker rules")
+    set_setting("language", "en")
+    assert "## Language" not in queue_seed_for_task(task)
+    delete_setting("language")

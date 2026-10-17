@@ -273,10 +273,33 @@ def queue_seed_for_task(task: dict) -> str:
 
     agent = resolve_agent_key(task.get("agent"))
     task_id = str(task["id"])
+    lines += _language_section()
     lines += ["", get_run_rules(agent).replace("{id}", task_id)]
     if task.get("fasttrack"):
         lines += ["", get_fasttrack_rules(agent).replace("{id}", task_id)]
     return "\n".join(lines)
+
+
+# English names of the UI languages other than English, for the seed's
+# language instruction (see :func:`_language_section`).
+_LANGUAGE_NAMES = {"de": "German"}
+
+
+def _language_section() -> list[str]:
+    """The seed's ``## Language`` part: the hand-over (summary, follow-ups,
+    report) is written in nTasker's UI language, so the user reads it in the
+    language they set. Empty for English, the agents' default anyway."""
+    from ntasker.i18n import get_active_language  # noqa: PLC0415 -- lazy: avoid cycle
+
+    name = _LANGUAGE_NAMES.get(get_active_language())
+    if name is None:
+        return []
+    return [
+        "",
+        "## Language",
+        "",
+        f"Write the hand-over -- summary, follow-ups and report, headings included -- in {name}.",
+    ]
 
 
 def _workspace_section(task_id: int, wt_id: int) -> list[str]:
