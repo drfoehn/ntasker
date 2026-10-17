@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from ntasker.app import app
 from ntasker.db import get_conn, init_db, set_db_path
-from ntasker.transcript import conversation_for, find_transcript, last_activity, parse_transcript
+from ntasker.transcript import context_window, conversation_for, find_transcript, last_activity, parse_transcript
 
 BASE = "http://127.0.0.1:8766"
 SID = "11111111-2222-3333-4444-555555555555"
@@ -172,6 +172,23 @@ def test_conversation_carries_the_current_blocker(tmp_path):
     assert conversation_for(tmp_path, None)["blocker"] is None
 
 
+def test_context_is_the_last_api_response():
+    turns = parse_transcript(EVENTS)
+    # prompt (fresh + cache write + cache read) plus output of the last response
+    assert turns[0]["context"] == 2 + 100 + 1000 + 50
+    assert turns[2]["context"] == 0   # no usage reported yet
+    smaller = {"input_tokens": 5, "cache_read_input_tokens": 300, "output_tokens": 20}
+    later = EVENTS + [_ev("assistant", [{"type": "text", "text": "ok"}], id="m5", usage=smaller,
+                          stop_reason="end_turn")]
+    assert parse_transcript(later)[-1]["context"] == 325   # after a compaction the fill drops
+
+
+def test_context_window_follows_the_model():
+    assert context_window(None) == 200_000
+    assert context_window("claude-opus-5-5") == 200_000
+    assert context_window("opus[1m]") == 1_000_000
+
+
 def test_find_transcript_rejects_path_tricks(tmp_path):
     proj = tmp_path / "projects" / "-some-cwd"
     proj.mkdir(parents=True)
@@ -230,6 +247,9 @@ def test_api_conversation(client):
     d = client.get(f"/api/tasks/{tid}/conversation").json()
     assert d["available"] is True and len(d["turns"]) == 3 and d["updated"]
     assert d["usage"]["input"] > 0
+    assert d["context"] == {"used": 1152, "limit": 200_000}
+    client.patch(f"/api/tasks/{tid}", json={"model": "opus[1m]"})
+    assert client.get(f"/api/tasks/{tid}/conversation").json()["context"]["limit"] == 1_000_000
     assert client.get("/api/tasks/9999/conversation").status_code == 404
 
 

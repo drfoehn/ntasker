@@ -135,6 +135,7 @@ from ntasker.settings import (
     get_session_discovery,
     get_sidebar_sections,
     get_triage_enabled,
+    get_setting,
     get_setting_raw,
     list_settings,
     set_setting,
@@ -722,6 +723,8 @@ def build_js_strings() -> dict[str, str]:
         "conv_edited_files": _("Edited:"),
         "conv_file_diff": _("Show the changes to {file}"),
         "conv_tokens_total": _("{n} tokens"),
+        "conv_context_badge": _("Context {pct} % / {limit}"),
+        "conv_context_hint": _("Context window: {used} of {limit} tokens in use"),
         "conv_tokens_badge": _("in {input} (+{cached} cache) / out {output}"),
         "conv_tokens_badge_nocache": _("in {input} / out {output}"),
         "conv_tokens_hint": _("Input {input} tokens ({cached} from cache) -- output {output} tokens"),
@@ -3478,7 +3481,7 @@ def api_task_conversation(task_id: int) -> JSONResponse:
     """The run's conversation: the run view's Conversation pane.
 
     ``{"supported": bool, "available": bool, "turns": [...], "usage": {...},
-    "blocker": {kind, text, at}|null, "updated": float|null}`` -- read from the agent's session transcript of the
+    "context": {used, limit}|null, "blocker": {kind, text, at}|null, "updated": float|null}`` -- read from the agent's session transcript of the
     task's stored session; turn fields see
     :func:`ntasker.transcript.parse_transcript`. ``supported`` is ``False`` for
     an agent without a readable transcript (the UI then shows the terminal);
@@ -3488,19 +3491,22 @@ def api_task_conversation(task_id: int) -> JSONResponse:
     for an unknown task.
     """
     with get_conn() as conn:
-        row = conn.execute("SELECT agent, session_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        row = conn.execute("SELECT agent, model, session_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=_("Task not found"))
     spec = get_spec(resolve_agent_key(row["agent"]))
     if not spec.transcript:
         return JSONResponse(
-            {"supported": False, "available": False, "turns": [], "usage": None, "blocker": None, "updated": None}
+            {"supported": False, "available": False, "turns": [], "usage": None, "context": None, "blocker": None,
+             "updated": None}
         )
     tid = str(task_id)
     rules = (get_run_rules(spec.key).replace("{id}", tid),
              get_fasttrack_rules(spec.key).replace("{id}", tid),
              MESSAGING_RULES.replace("{id}", tid))
-    conv = conversation_for(resolve_home(spec), row["session_id"], rules)
+    # The model the session was spawned with decides the context window size.
+    model = row["model"] or get_setting(spec.model_setting_key, env_var=spec.model_env_var)
+    conv = conversation_for(resolve_home(spec), row["session_id"], rules, model)
     return JSONResponse({"supported": True, **conv, "peer_names": messages.address_names()})
 
 

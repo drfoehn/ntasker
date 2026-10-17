@@ -834,7 +834,8 @@ body {
     border-left: 2px solid var(--tblr-border-color);
     color: var(--tblr-secondary);
 }
-.claude-conv-tokens {
+.claude-conv-tokens,
+.claude-conv-context {
     cursor: help;
 }
 /* A question's options (the open one and the answered ones): one row per

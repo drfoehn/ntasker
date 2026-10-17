@@ -82,6 +82,16 @@ _TAIL_BYTES = 64 * 1024
 _parsed: dict[Path, tuple[tuple, dict]] = {}
 _PARSED_KEEP = 16
 
+# Context window sizes, picked like the Claude Code statusline does: a model id
+# with the ``[1m]`` marker runs with the 1M-token window, anything else 200k.
+CONTEXT_WINDOW = 200_000
+CONTEXT_WINDOW_1M = 1_000_000
+
+
+def context_window(model: str | None) -> int:
+    """Token size of the context window ``model`` runs with (see :data:`CONTEXT_WINDOW`)."""
+    return CONTEXT_WINDOW_1M if "1m" in (model or "").lower() else CONTEXT_WINDOW
+
 
 def find_transcript(home: Path, session_id: str) -> Path | None:
     """The session's ``.jsonl`` under ``<home>/projects``, or ``None``.
@@ -360,6 +370,7 @@ def _new_turn(prompt: str, at: str | None, *, seed: bool = False, peer: dict | N
         "tools": [],
         "pending": None,
         "usage": _new_usage(),
+        "context": 0,
         "answer_at": None,
         "blocker": None,
         "injected": [],
@@ -407,6 +418,9 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
       (awaiting permission, a question or just still running), or ``None``;
     * ``usage`` -- tokens, see :func:`_add_usage`; ``answer_at`` -- the last
       agent event's timestamp;
+    * ``context`` -- tokens in the context window after the turn's last API
+      response (its prompt plus output), the figure the Claude Code statusline
+      shows; ``0`` before the first response;
     * ``blocker`` -- what keeps the agent from working (usage limit, not logged
       in, API unreachable ...), see :func:`_blocker`, or ``None``. It is the
       turn's last word only: output after it means the work went on;
@@ -498,6 +512,10 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
                 if mid:
                     seen_msgs.add(mid)
                 _add_usage(turn["usage"], msg["usage"])
+                ctx = _new_usage()
+                _add_usage(ctx, msg["usage"])
+                if ctx["input"] + ctx["output"]:
+                    turn["context"] = ctx["input"] + ctx["output"]
             for block in content:
                 if not isinstance(block, dict):
                     continue
@@ -531,25 +549,30 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
     return turns
 
 
-def conversation_for(home: Path, session_id: str | None, rules: Iterable[str] = ()) -> dict:
-    """``{"available", "turns", "usage", "blocker", "updated"}`` for a stored session id.
+def conversation_for(home: Path, session_id: str | None, rules: Iterable[str] = (),
+                     model: str | None = None) -> dict:
+    """``{"available", "turns", "usage", "context", "blocker", "updated"}`` for a stored session id.
 
     ``available`` is ``False`` when there is no id or no transcript (yet) -- a
     freshly spawned session writes its file only after the first prompt.
-    ``usage`` sums the turns' tokens. ``blocker`` is the last turn's (see
+    ``usage`` sums the turns' tokens. ``context`` is the session's current
+    context fill ``{used, limit}`` -- the last turn's ``context`` against the
+    window of ``model`` (see :func:`context_window`) -- or ``None`` before the
+    first response. ``blocker`` is the last turn's (see
     :func:`parse_transcript`) -- what stops the session right now, or ``None``.
     ``updated`` is the file's mtime so the client can skip unchanged polls. An
     unchanged file (same mtime and size, same rules) is served from
     :data:`_parsed` without parsing it again.
     """
-    empty = {"available": False, "turns": [], "usage": _new_usage(), "blocker": None, "updated": None}
+    empty = {"available": False, "turns": [], "usage": _new_usage(), "context": None, "blocker": None,
+             "updated": None}
     path = find_transcript(home, session_id or "")
     if path is None:
         return empty
     rules = tuple(rules)
     try:
         st = path.stat()
-        key = (st.st_mtime_ns, st.st_size, rules)
+        key = (st.st_mtime_ns, st.st_size, rules, model)
         hit = _parsed.get(path)
         if hit and hit[0] == key:
             return hit[1]
@@ -562,7 +585,10 @@ def conversation_for(home: Path, session_id: str | None, rules: Iterable[str] = 
         for k in total:
             total[k] += turn["usage"][k]
     blocker = turns[-1]["blocker"] if turns else None
-    result = {"available": True, "turns": turns, "usage": total, "blocker": blocker, "updated": st.st_mtime}
+    used = next((t["context"] for t in reversed(turns) if t["context"]), 0)
+    context = {"used": used, "limit": context_window(model)} if used else None
+    result = {"available": True, "turns": turns, "usage": total, "context": context, "blocker": blocker,
+              "updated": st.st_mtime}
     _parsed.pop(path, None)
     _parsed[path] = (key, result)
     while len(_parsed) > _PARSED_KEEP:

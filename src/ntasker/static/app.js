@@ -514,6 +514,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         _convQueueSentAt: {},
         convDragOver: false,
         convUsage: null,
+        convContext: null,
         // What stops the session right now ({kind, text, at}: usage limit, not
         // logged in, API unreachable ...) -- the last turn's blocker, or null.
         convBlocker: null,
@@ -4378,6 +4379,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             this.conv = null;
             this.convTurns = [];
             this.convUsage = null;
+            this.convContext = null;
             this.convBlocker = null;
             this.loadConversation(true);
             this._ensureConvPoll();
@@ -4420,6 +4422,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             const atBottom = !body || !prev.length
                 || body.scrollHeight - body.scrollTop - body.clientHeight < 80;
             this.convUsage = d.usage || null;
+            this.convContext = d.context || null;
             this.convBlocker = d.blocker || null;
             this.convTurns = (d.turns || []).map((t, i) => {
                 const old = prev[i];
@@ -4679,6 +4682,19 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             if (!u) return '';
             const args = { input: this.fmtTokens(u.input - u.cache_read), cached: this.fmtTokens(u.cache_read), output: this.fmtTokens(u.output) };
             return _i(u.cache_read ? 'conv_tokens_badge' : 'conv_tokens_badge_nocache', args);
+        },
+
+        // The session's context fill, shown like the Claude Code statusline
+        // ("ctx 40%/200k"): green, yellow from 50 %, red from 80 %.
+        contextBadge(c) {
+            const pct = Math.round(c.used / c.limit * 100);
+            const cls = pct >= 80 ? 'bg-red-lt' : pct >= 50 ? 'bg-yellow-lt' : 'bg-green-lt';
+            const limit = this.fmtTokens(c.limit);
+            return {
+                cls,
+                text: _i('conv_context_badge', { pct, limit }),
+                title: _i('conv_context_hint', { used: this.fmtTokens(c.used), limit }),
+            };
         },
 
         tokensHint(u) {

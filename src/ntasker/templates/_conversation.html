@@ -18,6 +18,12 @@
                 <i class="ti ti-coins me-1"></i><span x-text="$i18n('conv_tokens_total', {n: fmtTokens(convUsage.input + convUsage.output)})"></span>
             </span>
         </template>
+        <template x-if="convContext">
+            <span class="badge claude-conv-context" :class="contextBadge(convContext).cls"
+                  :title="contextBadge(convContext).title">
+                <i class="ti ti-gauge me-1"></i><span x-text="contextBadge(convContext).text"></span>
+            </span>
+        </template>
         <span class="flex-fill"></span>
         <button type="button" class="btn btn-sm btn-ghost-secondary" x-show="convTurns.length"
                 @click="setAllConvOpen(true)" x-text="$i18n('conv_expand_all')"></button>
