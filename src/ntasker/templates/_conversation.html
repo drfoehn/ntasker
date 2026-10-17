@@ -36,7 +36,7 @@
         <template x-for="(turn, i) in convTurns" :key="i">
             <div class="claude-conv-turn mb-3">
                 {# The prompt. The queue seed is the task itself: shown as a task card. #}
-                <div class="claude-conv-block claude-conv-prompt" :class="turn.seed && 'claude-conv-seed'">
+                <div class="claude-conv-block claude-conv-prompt" :class="turn.seed ? 'claude-conv-seed' : (turn.peer && 'claude-conv-peer')">
                     <button type="button" class="claude-conv-head" @click="toggleConv(i, 'p')"
                             :aria-expanded="convIsOpen(i, 'p')">
                         <i class="ti" :class="convIsOpen(i, 'p') ? 'ti-chevron-down' : 'ti-chevron-right'"></i>
@@ -59,8 +59,8 @@
                         </template>
                         <template x-if="!(turn.seed && runTask)">
                             <span class="d-flex align-items-center gap-2 flex-fill" style="min-width: 0">
-                                <i class="ti ti-user"></i>
-                                <span class="fw-medium" x-text="$i18n('conv_prompt')"></span>
+                                <i class="ti" :class="turn.peer ? 'ti-messages text-purple' : 'ti-user'"></i>
+                                <span class="fw-medium text-nowrap" x-text="turn.peer ? $i18n('conv_peer_from', {name: turn.peer.name}) : $i18n('conv_prompt')"></span>
                                 <span class="claude-conv-preview text-truncate" x-show="!convIsOpen(i, 'p')"
                                       x-text="turn.preview"></span>
                             </span>
@@ -134,12 +134,24 @@
 
                         {# What the user typed while the turn ran and the agent took in. #}
                         <template x-for="(inj, ii) in (turn.injected || [])" :key="'inj' + ii">
-                            <div class="claude-conv-injected mt-2">
+                            <div class="claude-conv-injected mt-2" :class="inj.peer && 'is-peer'">
                                 <div class="d-flex align-items-center gap-1 small text-secondary mb-1">
-                                    <i class="ti ti-user"></i><span class="fw-medium" x-text="$i18n('conv_injected')"></span>
+                                    <i class="ti" :class="inj.peer ? 'ti-messages text-purple' : 'ti-user'"></i><span class="fw-medium" x-text="inj.peer ? $i18n('conv_peer_from', {name: inj.peer}) : $i18n('conv_injected')"></span>
                                     <span class="ms-auto text-nowrap" x-show="inj.at" x-text="formatAbsolute(inj.at)"></span>
                                 </div>
                                 <div class="text-break" x-text="inj.text"></div>
+                            </div>
+                        </template>
+
+                        {# Messages the agent sent other agent sessions in this turn. #}
+                        <template x-for="(m, si) in turn.sent" :key="'sent' + si">
+                            <div class="claude-conv-sent mt-2">
+                                <div class="d-flex align-items-center gap-1 small text-secondary mb-1">
+                                    <i class="ti ti-send text-purple"></i>
+                                    <span class="fw-medium" x-text="$i18n(m.kind === 'wait' ? 'conv_peer_wait' : 'conv_peer_to', {name: m.toLabel})"></span>
+                                    <span class="ms-auto text-nowrap" x-show="m.at" x-text="formatAbsolute(m.at)"></span>
+                                </div>
+                                <div class="text-break" x-show="m.text" x-text="m.text"></div>
                             </div>
                         </template>
 

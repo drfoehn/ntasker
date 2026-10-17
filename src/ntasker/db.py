@@ -230,6 +230,22 @@ CREATE TABLE IF NOT EXISTS inbox (
     accept TEXT
 );
 
+-- Messages between agent sessions, brokered by ntasker (see ntasker.messages).
+-- ``from_task`` NULL = ntasker itself or a sender outside any task. A row is
+-- pending until ``delivered_at`` is set -- typed into the target's terminal
+-- (``pty``), handed to its hook (``hook``) or read by ``ntasker inbox``.
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_task INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+    to_task INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,                          -- note | wait | unblocked | lock
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    delivered_at TEXT,
+    delivered_via TEXT                           -- pty | hook | inbox
+);
+CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_task, delivered_at);
+
 -- One-paragraph summary per project, the triage's catalog. Generated lazily
 -- by ``claude -p`` on the first triage that needs it; the user can edit or
 -- regenerate it. A table (like hidden_projects) rather than settings keys so

@@ -55,6 +55,9 @@ class LiveSession:
 
     pid: int
     cwd: str
+    #: Claude Code's messaging socket (``CLAUDE_CODE_MESSAGING_SOCKET``), when
+    #: reported -- the session's ``SendMessage`` address (see :mod:`ntasker.messages`).
+    socket: str | None = None
     #: Wall-clock of the first report -- what the board shows as "running since".
     seen_at: float = field(default_factory=time.time)
 
@@ -66,10 +69,12 @@ class LiveSession:
 LIVE: dict[str, LiveSession] = {}
 
 
-def register_live(session_id: str, pid: int, cwd: str) -> None:
+def register_live(session_id: str, pid: int, cwd: str, socket: str | None = None) -> None:
     """Record a running terminal session. Repeat reports just refresh it."""
     known = LIVE.get(session_id)
-    LIVE[session_id] = LiveSession(pid=pid, cwd=cwd, seen_at=known.seen_at if known else time.time())
+    LIVE[session_id] = LiveSession(
+        pid=pid, cwd=cwd, socket=socket, seen_at=known.seen_at if known else time.time()
+    )
 
 
 def live_pid(session_id: str) -> int | None:

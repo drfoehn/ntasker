@@ -85,13 +85,14 @@ def test_pretooluse_server_down_passes(monkeypatch):
 
 def test_state_hooks_post(monkeypatch, fake_server):
     calls, _ = fake_server
+    monkeypatch.delenv("CLAUDE_CODE_MESSAGING_SOCKET", raising=False)
     assert _run(monkeypatch, ["waiting"], {}) == 0
     assert _run(monkeypatch, ["running"], {}) == 0
     assert _run(monkeypatch, ["waiting"], {"hook_event_name": "Stop"}) == 0
     assert calls == [
-        ("POST", "/api/claude/sessions/7/state", {"waiting": True, "turn_over": False}),
-        ("POST", "/api/claude/sessions/7/state", {"waiting": False, "turn_over": False}),
-        ("POST", "/api/claude/sessions/7/state", {"waiting": True, "turn_over": True}),
+        ("POST", "/api/claude/sessions/7/state", {"waiting": True, "turn_over": False, "socket": None}),
+        ("POST", "/api/claude/sessions/7/state", {"waiting": False, "turn_over": False, "socket": None}),
+        ("POST", "/api/claude/sessions/7/state", {"waiting": True, "turn_over": True, "socket": None}),
     ]
 
 

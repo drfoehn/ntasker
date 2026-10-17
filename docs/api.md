@@ -48,6 +48,7 @@ Interactive OpenAPI docs: <http://127.0.0.1:8766/api/docs>
 | GET | `/api/tasks/{id}/conversation` | `{supported, available, turns[], usage, blocker, updated}` -- the run's prompt/answer turns from the session transcript; `blocker` is `{kind, text, at}` (kind = `limit` \| `auth` \| `billing` \| `error`) or null ([claude-runs.md](claude-runs.md#the-run-view----conversation-terminal-split)) |
 | GET/POST/DELETE | `/api/tasks/{id}/context[/{cid}]` | Attachments ([task-context.md](task-context.md)) |
 | GET/PUT/POST | `/api/workspace[/file\|browse\|entry\|rename\|delete\|reveal]` | Workspace ([workspace.md](workspace.md)) |
+| GET/POST | `/api/peers`, `/api/tasks/{id}/messages[/take]`, `/api/tasks/{id}/wait` | Messaging between agent sessions ([messaging.md](messaging.md#api)) |
 | GET | `/api/claude-assets/status` | Read-only: `{installed, drift, package_version, claude_home, files[]}` |
 
 ## Schema

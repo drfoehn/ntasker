@@ -23,10 +23,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 from collections.abc import Iterable
 from pathlib import Path
 
 from ntasker.claude_runner import SESSION_ID_RE
+from ntasker.messages import FOOTER as _MSG_FOOTER
+from ntasker.messages import HEAD_PREFIX as _MSG_HEAD
+from ntasker.messages import HEAD_RE as _MSG_HEAD_RE
 
 # The queue seed (see claude_runner.queue_seed_for_task) starts with a heading and
 # a facts line and ends in the run rules (plus the fasttrack rules). Heading and
@@ -133,6 +137,83 @@ def _typed_mid_turn(ev: dict) -> str | None:
     if att.get("commandMode") != "prompt" or not isinstance(origin, dict) or origin.get("kind") != "human":
         return None
     return _user_text(att.get("prompt"))
+
+
+def _peer_message(ev: dict) -> dict | None:
+    """A ``SendMessage`` from another Claude session: ``{name, text}``, or ``None``.
+
+    Claude Code records it with ``origin.kind == "peer"`` -- as a (meta) user
+    event when it woke an idle session, as a ``queued_command`` attachment when
+    it arrived mid-turn. ``origin.body`` is the bare message.
+    """
+    holder = ev.get("attachment") if ev.get("type") == "attachment" else ev
+    origin = holder.get("origin") if isinstance(holder, dict) else None
+    if not isinstance(origin, dict) or origin.get("kind") != "peer":
+        return None
+    text = origin.get("body")
+    if not isinstance(text, str) or not text.strip():
+        return None
+    return {"name": str(origin.get("name") or origin.get("from") or "?"), "text": text.strip(), "via": "claude"}
+
+
+def _broker_message(text: str) -> tuple[str, dict] | None:
+    """A prompt ntasker typed in for the broker (see :func:`ntasker.messages.render`).
+
+    ``(text without header lines and footer, {name, via})`` -- ``name`` lists
+    the senders named in the header lines -- or ``None`` for any other prompt. Claude Code
+    records a multi-line paste wrapped in ``<pasted_content id=...>`` tags;
+    the wrapper goes.
+    """
+    m = _PASTE_RE.fullmatch(text.strip())
+    if m:
+        text = m.group(1).strip()
+    if not text.startswith(_MSG_HEAD):
+        return None
+    names, body = [], []
+    for line in text.replace(_MSG_FOOTER, "").splitlines():
+        m = _MSG_HEAD_RE.match(line.strip())
+        if m is None:
+            body.append(line)
+        elif m.group(2) not in names:
+            names.append(m.group(2))
+    return "\n".join(body).strip(), {"name": ", ".join(names), "via": "ntasker"}
+
+
+_PASTE_RE = re.compile(r'<pasted_content id="[^"]*">\s*(.*?)\s*</pasted_content id="[^"]*">', re.S)
+
+# ``ntasker msg <id> ...`` / ``ntasker wait-for <id> ...`` inside a Bash call.
+_SEND_RE = re.compile(r"(?:^|[;&|(]\s*)ntasker\s+(msg|wait-for)\s+#?(\d+)(.*)", re.S)
+
+
+def _sent_by_bash(command: str) -> dict | None:
+    """An outgoing broker message in a Bash call: ``{to, text, kind}``, or ``None``.
+
+    The text is what follows the task id -- unquoted -- or a heredoc's body.
+    """
+    m = _SEND_RE.search(command or "")
+    if not m:
+        return None
+    verb, to, rest = m.group(1), m.group(2), m.group(3).strip()
+    if rest.startswith("<<"):
+        lines = rest.splitlines()
+        text = "\n".join(lines[1:-1]) if len(lines) > 2 else ""
+    else:
+        try:
+            tokens = shlex.split(rest.splitlines()[0] if rest else "")
+        except ValueError:
+            tokens = rest.split()
+        words, skip = [], False
+        for tok in tokens:
+            if skip:
+                skip = False
+            elif tok in ("--task", "--host", "--port"):
+                skip = True
+            elif tok in ("&&", "||", ";", "|"):
+                break
+            else:
+                words.append(tok)
+        text = " ".join(words)
+    return {"to": f"#{to}", "text": text.strip(), "kind": "wait" if verb == "wait-for" else "note"}
 
 
 def _strip_seed(text: str, rules: Iterable[str]) -> tuple[str, bool]:
@@ -254,6 +335,38 @@ def _blocker(ev: dict, content) -> dict:
     }
 
 
+def _sent_message(block: dict) -> dict | None:
+    """A message to another session in a tool call: ``{to, text, kind, via}``, or ``None``."""
+    inp = block.get("input") if isinstance(block.get("input"), dict) else {}
+    if block.get("name") == "SendMessage":
+        return {"to": str(inp.get("to") or "?"), "text": str(inp.get("message") or ""),
+                "kind": "note", "via": "claude"}
+    if block.get("name") == "Bash":
+        sent = _sent_by_bash(str(inp.get("command") or ""))
+        return {**sent, "via": "ntasker"} if sent else None
+    return None
+
+
+def _new_turn(prompt: str, at: str | None, *, seed: bool = False, peer: dict | None = None) -> dict:
+    """A fresh turn, see :func:`parse_transcript` for the fields."""
+    return {
+        "prompt": prompt,
+        "prompt_at": at,
+        "seed": seed,
+        "peer": peer,
+        "answer": "",
+        "progress": [],
+        "done": False,
+        "tools": [],
+        "pending": None,
+        "usage": _new_usage(),
+        "answer_at": None,
+        "blocker": None,
+        "injected": [],
+        "sent": [],
+    }
+
+
 def _new_usage() -> dict:
     return {"input": 0, "cache_read": 0, "cache_write": 0, "output": 0}
 
@@ -298,7 +411,14 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
       in, API unreachable ...), see :func:`_blocker`, or ``None``. It is the
       turn's last word only: output after it means the work went on;
     * ``injected`` -- ``[{text, at}]``: what the user typed while the turn ran
-      and the agent took in mid-turn (see :func:`_typed_mid_turn`).
+      and the agent took in mid-turn (see :func:`_typed_mid_turn`); an entry
+      with ``peer`` set came from another Claude session (:func:`_peer_message`);
+    * ``peer`` -- ``{name, via}`` when the prompt is a message from another
+      agent session rather than the user: ``via`` ``claude`` (``SendMessage``,
+      :func:`_peer_message`) or ``ntasker`` (the broker, :func:`_broker_message`);
+    * ``sent`` -- ``[{to, text, kind, via, at}]``: messages the agent sent other
+      sessions in this turn -- ``SendMessage`` calls (``to`` is the address) and
+      ``ntasker msg`` / ``wait-for`` (``to`` is ``#<id>``).
 
     Agent output before the first prompt is dropped. Malformed lines are
     skipped -- the file is being appended to while we read it. Claude Code
@@ -316,7 +436,21 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
             ev = json.loads(raw)
         except (ValueError, TypeError):
             continue
-        if not isinstance(ev, dict) or ev.get("isSidechain") or ev.get("isMeta"):
+        if not isinstance(ev, dict) or ev.get("isSidechain"):
+            continue
+        peer = _peer_message(ev)
+        if peer is not None:
+            if ev.get("type") == "attachment":
+                if turns:
+                    turns[-1]["injected"].append(
+                        {"text": peer["text"], "at": ev.get("timestamp"), "peer": peer["name"]}
+                    )
+            else:
+                turns.append(_new_turn(peer["text"], ev.get("timestamp"),
+                                       peer={"name": peer["name"], "via": "claude"}))
+                texts.append([])
+            continue
+        if ev.get("isMeta"):
             continue
         typed = _typed_mid_turn(ev)
         if typed is not None:
@@ -343,20 +477,11 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
             seed = False
             if not turns:
                 text, seed = _strip_seed(text, rules)
-            turns.append({
-                "prompt": text,
-                "prompt_at": ev.get("timestamp"),
-                "seed": seed,
-                "answer": "",
-                "progress": [],
-                "done": False,
-                "tools": [],
-                "pending": None,
-                "usage": _new_usage(),
-                "answer_at": None,
-                "blocker": None,
-                "injected": [],
-            })
+            broker = _broker_message(text)
+            if broker is not None:
+                text, from_broker = broker
+            turns.append(_new_turn(text, ev.get("timestamp"), seed=seed,
+                                   peer=from_broker if broker is not None else None))
             texts.append([])
         elif kind == "assistant" and turns:
             turn = turns[-1]
@@ -381,6 +506,9 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
                 elif block.get("type") == "tool_use":
                     entry = _tool_entry(block)
                     turn["tools"].append(entry)
+                    sent = _sent_message(block)
+                    if sent is not None:
+                        turn["sent"].append({**sent, "at": ev.get("timestamp")})
                     if entry["kind"] == "ask" and entry["id"]:
                         asked[entry["id"]] = entry
             turn["done"] = msg.get("stop_reason") == "end_turn"

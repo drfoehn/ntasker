@@ -136,6 +136,7 @@ slots: [docs/plugins.md](docs/plugins.md).
 | [Agent runs](docs/claude-runs.md) | Run view (conversation, terminal, diff, report), resume, usage meters |
 | [Task queue](docs/task-queue.md) | Queue semantics, dependencies, fasttrack, run log |
 | [Directory locks](docs/directory-locks.md) | Keeping two agents out of the same working directory |
+| [Messaging](docs/messaging.md) | Agent sessions telling each other "I wait for you" / "I am done"; shown in the run view |
 | [Worktree runs](docs/worktrees.md) | Tasks in a shared git worktree on their own branch; merge, keep or discard at the end |
 | [Kanban view](docs/kanban.md) | Board vs. list view, drag-and-drop, keyboard shortcuts |
 | [Inbox](docs/inbox.md) | Raw notes triaged into task proposals by a stateless `claude -p` call |

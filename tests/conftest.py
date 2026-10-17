@@ -17,7 +17,9 @@ from ntasker import claude_runner, sessions
 @pytest.fixture(autouse=True)
 def _clean_session_registries():
     claude_runner.EXTERNAL.clear()
+    claude_runner.EXTERNAL_SOCKETS.clear()
     sessions.LIVE.clear()
     yield
     claude_runner.EXTERNAL.clear()
+    claude_runner.EXTERNAL_SOCKETS.clear()
     sessions.LIVE.clear()

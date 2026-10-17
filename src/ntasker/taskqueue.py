@@ -2,7 +2,8 @@
 
 A task is *queued* when its ``queue_order`` is not NULL; queued tasks are worked
 top-down (``queue_order ASC``). :func:`worker` ticks a few times a second and
-does exactly two things:
+does two things (plus handing pending agent messages to idle sessions, see
+:func:`ntasker.messages.deliver`):
 
 * **retire** entries that are finished: the task is ``status=done`` (closed by
   the user, or by the agent itself when the task told it to), or it was
@@ -83,7 +84,7 @@ import contextlib
 import sqlite3
 import sys
 
-from ntasker import locks, worktrees
+from ntasker import locks, messages, worktrees
 from ntasker.agents import agent_keys, get_spec, resolve_agent_key
 from ntasker.claude_runner import (
     active_session_ids,
@@ -660,3 +661,6 @@ async def worker() -> None:
         # tick re-reads the queue from scratch and picks up where it left off.
         with contextlib.suppress(Exception):
             tick()
+        # Pending agent-to-agent messages go into sessions whose turn is over.
+        with contextlib.suppress(Exception):
+            await messages.deliver()

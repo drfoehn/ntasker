@@ -53,7 +53,9 @@ def register_external_via_server(tid: str) -> bool:
     that process lives. It also exports ``CLAUDE_CODE_SESSION_ID`` -- the
     session's own id, which names its transcript -- so the server can store it
     on the task together with this directory. That is what lets the board
-    resume *this* conversation once the terminal is closed. Skipped inside an
+    resume *this* conversation once the terminal is closed. The messaging
+    socket (``CLAUDE_CODE_MESSAGING_SOCKET``) goes along too -- other Claude
+    sessions reach this one there (``ntasker peers``). Skipped inside an
     ntasker-spawned session (``NTASKER_TASK_ID`` set) -- the server already
     tracks that one.
     """
@@ -70,6 +72,10 @@ def register_external_via_server(tid: str) -> bool:
     if re.fullmatch(r"[0-9a-fA-F-]{36}", sid):
         body["session_id"] = sid
         body["cwd"] = os.getcwd()
+    # Its cross-session messaging address, for other Claude sessions.
+    socket = (os.environ.get("CLAUDE_CODE_MESSAGING_SOCKET") or "").strip()
+    if socket:
+        body["socket"] = socket
     try:
         req = urllib.request.Request(
             f"{BASE_URL}/api/claude/sessions/{tid}/external",

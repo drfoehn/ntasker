@@ -314,6 +314,10 @@ stays listed as *Handed over* until the conversation shows it: such absorbed pro
 while it worked* blocks (`injected` in the turn, see `_typed_mid_turn` in `transcript.py`). A fresh-context reply has
 no *Send now* -- a `/clear` mid-turn makes no sense.
 
+**Agent-to-agent messages** show in purple: a prompt that is a message from another session (`SendMessage` or an
+nTasker broker message) is labelled *Message from ...*, and what the agent sent other sessions shows under its turn as
+*Message to ...* / *Waits for ...*. See [messaging.md](messaging.md#conversation-view).
+
 Parsing (`src/ntasker/transcript.py`) happens on the server per poll (`GET /api/tasks/<id>/conversation`, every
 2.5 s while the pane is on screen); an unchanged file is answered from a small in-process cache keyed on its mtime
 and size.

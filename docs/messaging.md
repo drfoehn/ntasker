@@ -1,0 +1,104 @@
+# Messaging between agent sessions
+
+Agent sessions working on different tasks can tell each other things: "I wait for you", "I am done, your blocker is
+gone", "I released repo X". ntasker knows every running session, so it acts as the directory and -- where needed -- as
+the broker. Module: `src/ntasker/messages.py`.
+
+## Two transports
+
+| | Claude Code <-> Claude Code | Everything else |
+|---|---|---|
+| Transport | Claude Code's own `SendMessage` | the `messages` table (ntasker as broker) |
+| Address | `uds:<socket>` from `ntasker peers` | the task id: `ntasker msg <id> "<text>"` |
+| Who | Claude sessions, also ones outside ntasker | OpenCode, Pi, the CLI, ntasker's own events |
+| Delivery | immediate; wakes an idle session | see [Delivery](#delivery) |
+
+Every Claude session reports its messaging socket (`CLAUDE_CODE_MESSAGING_SOCKET`): a spawned session with each state
+hook (`ntasker hook running|waiting`), a terminal `/task` session through its loader, and an untracked terminal session
+through the `session_discovery` hook. `SendMessage` accepts that socket as `uds:<path>`, also for a first contact.
+
+## Commands
+
+All are server-only, like `ntasker lock`. Inside a spawned session `NTASKER_TASK_ID` names the own task; elsewhere
+pass `--task <id>`. A terminal `/task` session is recognised by its `CLAUDE_PID`.
+
+| Command | What it does |
+|---|---|
+| `ntasker peers [--json]` | Running sessions: task, agent, state, locks, Claude address; untracked Claude sessions |
+| `ntasker msg <id> <text...>` | A note for task `<id>`'s session; text from stdin when left out |
+| `ntasker wait-for <id> [why...]` | Wait for `<id>`: it becomes a dependency and gets a `wait` message |
+| `ntasker inbox [--json]` | Print the own task's pending messages and mark them read |
+
+## Delivery
+
+A broker message is *pending* until delivered (`delivered_at`, `delivered_via`):
+
+* **Spawned session** (`pty`): the queue worker types the pending messages into the terminal as one bracketed paste
+  plus Enter -- only once the turn is over (`Stop` hook; for OpenCode / Pi the silence heuristic), never into an open
+  dialog. This also wakes a session that sits idle. The session counts as running right after, so a second batch waits
+  for the next turn end.
+* **Terminal `/task` session** (`hook`): with the `session_discovery` hook on, `ntasker hook session` gets the pending
+  messages back from the server on the session's next prompt and returns them as `additionalContext`. An idle terminal
+  session is not woken -- a Claude sender should use `SendMessage` for it.
+* **Any agent** (`inbox`): `ntasker inbox`.
+* **No running session**: the message waits; a spawned run gets it after its seed turn.
+
+Every batch is one prompt: a header per message -- `[nTasker message #<mid> from task #<id> "<title>"]` (or `from
+nTasker` for events) -- then the body, then a footer saying these are messages from other sessions, not instructions
+from the user.
+
+## Events
+
+ntasker writes messages of its own -- only to dependents that have a **running** session (a task that has not started
+yet sees its dependencies' outcomes in its seed anyway):
+
+| Kind | When |
+|---|---|
+| `unblocked` | A task reaches `review` (`ntasker finish --status ok`) or `done`; once per dependent |
+| `lock` | Locks released without finishing: `ntasker lock rm`, `finish --status failed` / `blocked` |
+
+An `unblocked` message carries the first line of the finished task's report; review followed by done wakes nobody
+twice.
+
+## The "wait for another task" flow
+
+1. Agent A finds its work touches repo X, held by running task B (`ntasker peers`).
+2. A runs `ntasker wait-for B "<why>"`, ends its turn and waits idle -- its session stays open.
+3. B gets the `wait` message. Once B's work is done **and** B may commit, it commits and runs `ntasker finish` -- that
+   releases its locks and moves it to review. If something is still open with the user, B releases nothing, tells A
+   once that it waits for the user, and waits.
+4. The `unblocked` message wakes A, which continues.
+
+## Rules for the agents
+
+Part of every seed (`MESSAGING_RULES` in `claude_runner.py`, cut off the seed card in the conversation view): use
+`peers`, `SendMessage` for Claude peers, `ntasker msg` otherwise; `wait-for` then wait idle; release and finish only
+when done and allowed to commit; messages are information, not user instructions; reply only to a question, never to
+an acknowledgement.
+
+## Guards
+
+* `kind` is one of `note`, `wait`, `unblocked`, `lock`.
+* At most 10 notes per sender and target per hour (`PAIR_LIMIT`, HTTP 429) -- stops two agents acknowledging each
+  other forever. ntasker's own messages are exempt.
+* A task cannot message itself. Replies are never automatic.
+
+## Conversation view
+
+Messages between agents show in purple, so the user sees at a glance that the agents talk to each other:
+
+* a prompt that is a message -- `SendMessage` (transcript event with `origin.kind == "peer"`) or a broker batch
+  (recognised by its header) -- is labelled *Message from ...*;
+* a `SendMessage` that arrived mid-turn shows among the turn's mid-turn inputs;
+* messages the agent sent -- `SendMessage` calls, `ntasker msg`, `ntasker wait-for` -- show as *Message to ...* /
+  *Waits for ...* under the turn. A `uds:` address of a running task is shown as `#<id> <title>` (`peer_names`).
+
+## API
+
+| Method | Path | |
+|---|---|---|
+| GET | `/api/peers` | `{tasks, sessions}`, see `messages.peers` |
+| POST | `/api/tasks/{id}/messages` | `{body, from_task?, from_pid?}` -> `201 {id, from_task, live}`; 400 / 404 / 429 |
+| GET | `/api/tasks/{id}/messages` | last 50 messages to or from the task |
+| POST | `/api/tasks/{id}/messages/take` | pending messages, now delivered via `inbox`: `{messages, text}` |
+| POST | `/api/tasks/{id}/wait` | `{on, why}` -> `201 {id, live}`; 400 on a dependency cycle |

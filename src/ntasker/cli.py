@@ -1680,6 +1680,106 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     return 0
 
 
+# Messages between agent sessions --------------------------------------------
+# Server-only, like ``lock``: who runs and who waits is known to the server alone.
+
+
+def _own_task(args: argparse.Namespace) -> int | None:
+    """The task this command speaks for: ``--task`` > ``NTASKER_TASK_ID``."""
+    if getattr(args, "task", None) is not None:
+        return args.task
+    with contextlib.suppress(TypeError, ValueError):
+        return int(os.environ.get("NTASKER_TASK_ID") or "")
+    return None
+
+
+def _claude_pid() -> int | None:
+    with contextlib.suppress(TypeError, ValueError):
+        return int(os.environ.get("CLAUDE_PID") or 0) or None
+    return None
+
+
+def _message_request(args: argparse.Namespace, method: str, path: str, body: dict | None):
+    """One call for the messaging commands; ``(rc, data)``, errors printed."""
+    try:
+        status, data = _api_call(_server_base(args), method, path, body)
+    except OSError as exc:
+        print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+        return 1, {}
+    if status >= 400:
+        detail = data.get("detail", status) if isinstance(data, dict) else status
+        print(_("ntasker: {detail}").format(detail=detail), file=sys.stderr)
+        return 1, data
+    return 0, data
+
+
+def cmd_peers(args: argparse.Namespace) -> int:
+    """The running sessions to talk to, with their Claude ``SendMessage`` address."""
+    rc, data = _message_request(args, "GET", "/api/peers", None)
+    if rc or args.json:
+        if not rc:
+            _print_json(data)
+        return rc
+    own = _own_task(args)
+    if not data["tasks"] and not data["sessions"]:
+        print(_("(no running sessions)"))
+    for t in data["tasks"]:
+        mark = "*" if t["id"] == own else " "
+        held = ", ".join([t["project"] or _("(cross)"), *t["locks"]])
+        print(f"{mark}#{t['id']} {t['title']}  [{t['agent']}, {t['state']}]  {_('holds')}: {held}")
+        print("    " + (t["address"] or f'ntasker msg {t["id"]} "<text>"'))
+    for sess in data["sessions"]:
+        print(f"  {_('no task')}: {sess['project'] or sess['cwd']}")
+        print(f"    {sess['address']}")
+    return 0
+
+
+def cmd_msg(args: argparse.Namespace) -> int:
+    """Send a task's session a note; the text from the argument or stdin."""
+    text = " ".join(args.text) if args.text else ("" if sys.stdin.isatty() else sys.stdin.read())
+    body = {"body": text, "from_task": _own_task(args), "from_pid": _claude_pid()}
+    rc, data = _message_request(args, "POST", f"/api/tasks/{args.task_id}/messages", body)
+    if rc:
+        return rc
+    if data.get("live"):
+        print(_("Message #{mid} to #{id} -- it reaches the session once its turn is over.").format(
+            mid=data["id"], id=args.task_id))
+    else:
+        print(_("Message #{mid} to #{id} -- no session runs; it waits for the next one.").format(
+            mid=data["id"], id=args.task_id))
+    return 0
+
+
+def cmd_inbox(args: argparse.Namespace) -> int:
+    """Print and mark read the pending messages of the own task."""
+    own = _own_task(args)
+    if own is None:
+        print(_("ntasker: no task -- pass --task <id>."), file=sys.stderr)
+        return 2
+    rc, data = _message_request(args, "POST", f"/api/tasks/{own}/messages/take", None)
+    if rc or args.json:
+        if not rc:
+            _print_json(data["messages"])
+        return rc
+    print(data["text"] or _("(no new messages)"))
+    return 0
+
+
+def cmd_wait_for(args: argparse.Namespace) -> int:
+    """The own task waits for another: it becomes a dependency and is told so."""
+    own = _own_task(args)
+    if own is None:
+        print(_("ntasker: no task -- pass --task <id>."), file=sys.stderr)
+        return 2
+    body = {"on": args.task_id, "why": " ".join(args.why)}
+    rc, _data = _message_request(args, "POST", f"/api/tasks/{own}/wait", body)
+    if rc:
+        return rc
+    print(_("#{own} waits for #{id}. End your turn now -- you are woken once #{id} is finished.").format(
+        own=own, id=args.task_id))
+    return 0
+
+
 # Claude Code hooks -------------------------------------------------------------
 # Run *inside* an ntasker-spawned Claude Code session (wired via the
 # ``--settings`` file, see claude_assets/hooks/*.json). They read the hook's
@@ -1720,7 +1820,11 @@ def _hook_state(waiting: bool) -> int:
         return 0
     with contextlib.suppress(Exception):
         # ``Stop`` ends the turn; the permission ``Notification`` waits on a dialog.
-        body = {"waiting": waiting, "turn_over": payload.get("hook_event_name") == "Stop"}
+        body = {
+            "waiting": waiting,
+            "turn_over": payload.get("hook_event_name") == "Stop",
+            "socket": os.environ.get("CLAUDE_CODE_MESSAGING_SOCKET"),
+        }
         _api_call(base, "POST", f"/api/claude/sessions/{task_id}/state", body, 2.0)
     return 0
 
@@ -1813,7 +1917,9 @@ def cmd_hook_session(args: argparse.Namespace) -> int:
     started itself (skipped: the server already tracks those) and while no
     server is running (a refused connection is not an error here). The pid
     comes from ``CLAUDE_PID``, the session id and directory from the hook
-    payload, with the environment as a fallback.
+    payload, with the environment as a fallback. When the session works on a
+    task, the server answers with that task's pending messages, which go back
+    to Claude Code as ``additionalContext`` (see :mod:`ntasker.messages`).
     """
     if os.environ.get("NTASKER_TASK_ID"):
         return 0
@@ -1830,9 +1936,21 @@ def cmd_hook_session(args: argparse.Namespace) -> int:
         pid = 0
     if not session or pid <= 0:
         return 0
-    body = {"session_id": session, "pid": pid, "cwd": str(payload.get("cwd") or os.getcwd())}
-    with contextlib.suppress(Exception):
-        _api_call(_server_base(args), "POST", "/api/claude/sessions/live", body, 2.0)
+    body = {
+        "session_id": session,
+        "pid": pid,
+        "cwd": str(payload.get("cwd") or os.getcwd()),
+        "socket": os.environ.get("CLAUDE_CODE_MESSAGING_SOCKET"),
+    }
+    try:
+        _status, data = _api_call(_server_base(args), "POST", "/api/claude/sessions/live", body, 2.0)
+    except Exception:  # noqa: BLE001 -- no server is not an error here
+        return 0
+    # A terminal ``/task`` session gets its task's pending messages as context.
+    text = data.get("messages") if isinstance(data, dict) else None
+    event = payload.get("hook_event_name")
+    if text and event in ("SessionStart", "UserPromptSubmit"):
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}))
     return 0
 
 
@@ -2877,6 +2995,27 @@ def build_parser() -> argparse.ArgumentParser:
     sp_run.add_argument("--port", type=int, default=None)
     sp_run.set_defaults(func=cmd_run)
 
+    # peers / msg / inbox / wait-for ---------------------------------------
+    sp_peers = sub.add_parser("peers", help=_("Running agent sessions to talk to"))
+    sp_peers.add_argument("--json", action="store_true")
+    sp_msg = sub.add_parser("msg", help=_("Send a message to a task's session"))
+    sp_msg.add_argument("task_id", type=_task_id)
+    sp_msg.add_argument("text", nargs="*", help=_("The message; read from stdin when left out."))
+    sp_inbox = sub.add_parser("inbox", help=_("Read the messages sent to your task"))
+    sp_inbox.add_argument("--json", action="store_true")
+    sp_wait = sub.add_parser("wait-for", help=_("Wait for another task to finish; it is told so"))
+    sp_wait.add_argument("task_id", type=_task_id)
+    sp_wait.add_argument("why", nargs="*", help=_("Why you wait -- shown to the other session."))
+    for sp, func in (
+        (sp_peers, cmd_peers), (sp_msg, cmd_msg), (sp_inbox, cmd_inbox), (sp_wait, cmd_wait_for)
+    ):
+        sp.add_argument("--task", type=_task_id, default=None,
+                        help=_("Your task (default: NTASKER_TASK_ID)."))
+        # Server to talk to; default NTASKER_URL (set inside spawned sessions).
+        sp.add_argument("--host", default=None)
+        sp.add_argument("--port", type=int, default=None)
+        sp.set_defaults(func=func)
+
     # hook ----------------------------------------------------------------
     # Claude Code hook entry points; not meant to be typed by hand.
     sp_hook = sub.add_parser("hook", help=_("Claude Code hook handlers (used by spawned sessions)"))
@@ -3174,9 +3313,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "assets" and getattr(args, "assets_cmd", None) in {"fetch", "remove"}:
         set_active_language(resolve_for_cli())
         return args.func(args)
-    # `stop`, `lock`, `finish` and `hook` are pure HTTP requests to a running
+    # `stop`, `lock`, `finish`, `hook` and messaging are pure HTTP requests to a running
     # server -- never create a DB for them (hooks fire inside every spawned session).
-    if args.command in {"stop", "lock", "finish", "hook"}:
+    if args.command in {"stop", "lock", "finish", "hook", "peers", "msg", "inbox", "wait-for"}:
         set_active_language(resolve_for_cli())
         return args.func(args)
     # `service` (install/uninstall/status), `self-update` and `completion`

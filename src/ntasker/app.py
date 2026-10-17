@@ -44,6 +44,7 @@ from ntasker.claude_assets import (
     session_hook_state,
 )
 from ntasker.claude_runner import (
+    MESSAGING_RULES,
     PLANNER_TASK_ID,
     SESSION_ID_RE,
     active_session_ids,
@@ -69,7 +70,7 @@ from ntasker.projects import (
 )
 from ntasker.rundiff import changed_paths, parse_baselines, run_diff
 from ntasker.transcript import conversation_for, last_activity, question_entries
-from ntasker import completion, locks, plugins, sessions, taskqueue, triage, worktrees
+from ntasker import completion, locks, messages, plugins, sessions, taskqueue, triage, worktrees
 from ntasker.newproject import created_projects
 from ntasker.newproject import router as newproject_router
 from ntasker import db as _db_module
@@ -687,6 +688,9 @@ def build_js_strings() -> dict[str, str]:
         "conv_queue_fresh": _("Fresh context"),
         "conv_queue_images": _("Images: {n}"),
         "conv_injected": _("Sent while it worked"),
+        "conv_peer_from": _("Message from {name}"),
+        "conv_peer_to": _("Message to {name}"),
+        "conv_peer_wait": _("Waits for {name}"),
         "conv_views": _("Run views"),
         "conv_terminal": _("Terminal"),
         "conv_report_side": _("Show the report beside the current view"),
@@ -1850,6 +1854,7 @@ class ExternalSessionIn(BaseModel):
     pid: int = Field(gt=0)
     session_id: str | None = Field(default=None, pattern=SESSION_ID_RE)
     cwd: str | None = None
+    socket: str | None = None
 
 
 @app.post("/api/claude/sessions/{task_id}/external")
@@ -1871,7 +1876,7 @@ def api_claude_session_external(task_id: int, payload: ExternalSessionIn) -> JSO
     with get_conn() as conn:
         if conn.execute("SELECT 1 FROM tasks WHERE id = ?", (task_id,)).fetchone() is None:
             raise HTTPException(status_code=404, detail=_("Task not found"))
-    register_external(task_id, payload.pid)
+    register_external(task_id, payload.pid, payload.socket or None)
     if payload.session_id:
         bind_session(task_id, payload.session_id, payload.cwd or None)
     taskqueue.adopt_running(task_id)
@@ -1882,6 +1887,7 @@ class LiveSessionIn(BaseModel):
     session_id: str = Field(pattern=SESSION_ID_RE)
     pid: int = Field(gt=0)
     cwd: str
+    socket: str | None = None
 
 
 @app.post("/api/claude/sessions/live")
@@ -1893,9 +1899,16 @@ def api_claude_session_live(payload: LiveSessionIn) -> JSONResponse:
     what lets the board end a session before taking it over -- a session that
     never reports is still listed and adoptable, just not endable. Deliberately
     task-free: most of these belong to no task yet.
+
+    ``messages``: when the process works on a task (``/task`` in a terminal),
+    that task's pending messages as one text, now marked delivered -- the hook
+    hands it to the session as context (see :func:`ntasker.messages.take_for_pid`).
+    ``None`` otherwise.
     """
-    sessions.register_live(payload.session_id, payload.pid, payload.cwd)
-    return JSONResponse({"ok": True})
+    sessions.register_live(payload.session_id, payload.pid, payload.cwd, payload.socket or None)
+    with get_conn() as conn:
+        text = messages.take_for_pid(conn, payload.pid)
+    return JSONResponse({"ok": True, "messages": text})
 
 
 @app.get("/api/claude/sessions/live")
@@ -1996,6 +2009,7 @@ def api_claude_session_adopt(task_id: int, payload: AdoptSessionIn) -> JSONRespo
 class SessionStateIn(BaseModel):
     waiting: bool
     turn_over: bool = False
+    socket: str | None = None
 
 
 @app.post("/api/claude/sessions/{task_id}/state")
@@ -2009,7 +2023,7 @@ def api_claude_session_state(task_id: int, payload: SessionStateIn) -> JSONRespo
     heuristic for that session -- see :func:`ntasker.claude_runner.session_states`.
     404 when the task has no live session.
     """
-    if not set_hook_state(task_id, payload.waiting, payload.turn_over):
+    if not set_hook_state(task_id, payload.waiting, payload.turn_over, payload.socket or None):
         raise HTTPException(status_code=404, detail=_("No live session for this task"))
     return JSONResponse({"ok": True})
 
@@ -2285,6 +2299,91 @@ def _refuse_held(
         )
 
 
+# ---------------------------------------------------------------------------
+# Routes -- API: messages between agent sessions (see ntasker.messages)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/peers")
+def api_peers() -> JSONResponse:
+    """Running sessions an agent can message -- see :func:`ntasker.messages.peers`."""
+    return JSONResponse(messages.peers())
+
+
+class MessageIn(BaseModel):
+    body: str = Field(min_length=1, max_length=8000)
+    #: The sending task; ``None`` = resolve it from ``from_pid``, else no task.
+    from_task: int | None = None
+    #: The sender's ``CLAUDE_PID`` -- names the task of an external session.
+    from_pid: int | None = None
+
+
+def _message_error(e: messages.MessageError) -> HTTPException:
+    return HTTPException(status_code=e.status, detail=e.detail)
+
+
+@app.post("/api/tasks/{task_id}/messages", status_code=201)
+def api_post_message(task_id: int, payload: MessageIn) -> JSONResponse:
+    """Send task ``task_id`` a note. Pending until delivered (see :mod:`ntasker.messages`).
+
+    ``live``: whether the target has a running session right now -- if not,
+    the note waits for its next run.
+    """
+    sender = payload.from_task or messages.task_for_pid(payload.from_pid)
+    with get_conn() as conn:
+        try:
+            mid = messages.post(conn, task_id, payload.body, from_task=sender)
+        except messages.MessageError as e:
+            raise _message_error(e)
+    return JSONResponse({"id": mid, "from_task": sender, "live": task_id in messages.live_task_ids()},
+                        status_code=201)
+
+
+@app.get("/api/tasks/{task_id}/messages")
+def api_list_messages(task_id: int) -> JSONResponse:
+    """The last 50 messages to or from ``task_id``, oldest first."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM (SELECT * FROM messages WHERE to_task = ? OR from_task = ? "
+            "ORDER BY id DESC LIMIT 50) ORDER BY id",
+            (task_id, task_id),
+        ).fetchall()
+    return JSONResponse([messages.as_dict(r) for r in rows])
+
+
+@app.post("/api/tasks/{task_id}/messages/take")
+def api_take_messages(task_id: int) -> JSONResponse:
+    """``ntasker inbox``: the task's pending messages, now marked delivered.
+
+    ``text`` is the same rendering a session gets typed in; ``messages`` the rows.
+    """
+    with get_conn() as conn:
+        rows = messages.pending(conn, task_id)
+        messages.mark_delivered(conn, [r["id"] for r in rows], "inbox")
+    return JSONResponse(
+        {"messages": [messages.as_dict(r) for r in rows], "text": messages.render(rows) if rows else ""}
+    )
+
+
+class WaitIn(BaseModel):
+    on: int
+    why: str = ""
+
+
+@app.post("/api/tasks/{task_id}/wait", status_code=201)
+def api_wait_for(task_id: int, payload: WaitIn) -> JSONResponse:
+    """Task ``task_id`` waits for ``on``: dependency + ``wait`` message.
+
+    See :func:`ntasker.messages.wait_for`. ``live``: whether ``on`` runs now.
+    """
+    with get_conn() as conn:
+        try:
+            mid = messages.wait_for(conn, task_id, payload.on, payload.why)
+        except messages.MessageError as e:
+            raise _message_error(e)
+    return JSONResponse({"id": mid, "live": payload.on in messages.live_task_ids()}, status_code=201)
+
+
 def _task_locks_response(conn: sqlite3.Connection, task_id: int) -> JSONResponse:
     row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
     task = row_to_task(row, load_tags_for(conn, task_id), load_deps_for(conn, task_id))
@@ -2316,8 +2415,11 @@ def api_remove_lock(task_id: int, project: str) -> JSONResponse:
         row = conn.execute("SELECT locks FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=_("Task not found"))
-        kept = [p for p in locks.parse(row["locks"]) if p != project]
+        held = locks.parse(row["locks"])
+        kept = [p for p in held if p != project]
         conn.execute("UPDATE tasks SET locks = ? WHERE id = ?", (locks.dump(kept), task_id))
+        if len(kept) < len(held):
+            messages.notify_lock_released(conn, task_id, [project])
         return _task_locks_response(conn, task_id)
 
 
@@ -3362,7 +3464,9 @@ def api_task_conversation(task_id: int) -> JSONResponse:
     task's stored session; turn fields see
     :func:`ntasker.transcript.parse_transcript`. ``supported`` is ``False`` for
     an agent without a readable transcript (the UI then shows the terminal);
-    ``available`` is ``False`` until the session wrote its first prompt. 404
+    ``available`` is ``False`` until the session wrote its first prompt.
+    ``peer_names`` maps the ``SendMessage`` addresses of running tasks to
+    ``#<id> <title>`` (see :func:`ntasker.messages.address_names`). 404
     for an unknown task.
     """
     with get_conn() as conn:
@@ -3376,9 +3480,10 @@ def api_task_conversation(task_id: int) -> JSONResponse:
         )
     tid = str(task_id)
     rules = (get_run_rules(spec.key).replace("{id}", tid),
-             get_fasttrack_rules(spec.key).replace("{id}", tid))
+             get_fasttrack_rules(spec.key).replace("{id}", tid),
+             MESSAGING_RULES.replace("{id}", tid))
     conv = conversation_for(resolve_home(spec), row["session_id"], rules)
-    return JSONResponse({"supported": True, **conv})
+    return JSONResponse({"supported": True, **conv, "peer_names": messages.address_names()})
 
 
 def _dep_error_detail(e: DepError) -> str:
@@ -3597,6 +3702,9 @@ def api_update_task(task_id: int, payload: TaskUpdate) -> JSONResponse:
                 raise HTTPException(status_code=400, detail=_dep_error_detail(e))
             set_task_deps(conn, task_id, dep_ids)
 
+        if fields.get("status") == "done" or fields.get("phase") == "review":
+            messages.notify_finished(conn, task_id, "done" if fields.get("status") == "done" else "review")
+
         row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         tags = load_tags_for(conn, task_id)
         depends = load_deps_for(conn, task_id)
@@ -3674,6 +3782,12 @@ def api_task_outcome(task_id: int, payload: OutcomeIn) -> JSONResponse:
         if fields:
             set_clause = ", ".join(f"{k} = ?" for k in fields)
             conn.execute(f"UPDATE tasks SET {set_clause} WHERE id = ?", [*fields.values(), task_id])
+        # Wake whoever waits for this task; a failed run only gave its locks back.
+        finished = fields.get("status") or fields.get("phase")
+        if finished in ("done", "review"):
+            messages.notify_finished(conn, task_id, finished)
+        elif "locks" in fields:
+            messages.notify_lock_released(conn, task_id, locks.parse(row["locks"]))
         if fasttrack:
             outcome_id = insert_outcome(
                 conn,

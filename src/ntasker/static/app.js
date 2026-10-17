@@ -4439,6 +4439,8 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                     kinds: this._stepKinds(t.tools),
                     editedFiles: edited,
                     decisions,
+                    // A Claude peer is addressed by its socket; the server names the known ones.
+                    sent: (t.sent || []).map(m => ({ ...m, toLabel: (d.peer_names || {})[m.to] || m.to })),
                 };
             });
             this._pruneSentQueued(id);
