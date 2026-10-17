@@ -133,6 +133,12 @@ def wait_for(conn: sqlite3.Connection, task_id: int, on_id: int, why: str = "") 
     row = conn.execute("SELECT title FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if row is None:
         raise MessageError(404, f"task #{task_id} not found")
+    from ntasker import locks, lockqueue  # noqa: PLC0415 -- lazy: lockqueue imports this module
+
+    chain = lockqueue.deadlock(conn, task_id, on_id, locks.held_dirs(conn, live_task_ids()))
+    if chain is not None:
+        lockqueue.tell_deadlock(conn, task_id, chain, "you to finish")
+        raise MessageError(409, lockqueue.deadlock_text(chain))
     deps = _depends_on(conn, task_id)
     if on_id not in deps:
         try:
@@ -187,7 +193,8 @@ def notify_finished(conn: sqlite3.Connection, task_id: int, state: str) -> list[
             (task_id, dep),
         ).fetchone()
         if told:
-            if state == "done" and project and not conn.execute(
+            freed = state == "done" and project and not _waits_for_grant(conn, dep, [project])
+            if freed and not conn.execute(
                 "SELECT 1 FROM messages WHERE from_task = ? AND to_task = ? AND kind = 'lock' AND id > ?",
                 (task_id, dep, told["id"]),
             ).fetchone():
@@ -213,14 +220,26 @@ def notify_finished(conn: sqlite3.Connection, task_id: int, state: str) -> list[
     return ids
 
 
+def _waits_for_grant(conn: sqlite3.Connection, task_id: int, projects: list[str]) -> bool:
+    """Whether ``task_id`` queued for one of ``projects`` -- the grant tells it instead."""
+    from ntasker import lockqueue  # noqa: PLC0415 -- lazy: lockqueue imports this module
+
+    return lockqueue.wants(conn, task_id, projects)
+
+
 def notify_lock_released(conn: sqlite3.Connection, task_id: int, projects: list[str]) -> list[int]:
-    """``task_id`` gave back directory locks: tell its live dependents."""
+    """``task_id`` gave back directory locks: tell its live dependents.
+
+    A dependent queued for one of them (``lock add --wait``) is skipped: the
+    worker grants it the lock and says so (:func:`ntasker.lockqueue.grant`).
+    """
     if not projects:
         return []
     names = ", ".join(projects)
     return [
         post(conn, dep, f"Task #{task_id} released its lock on {names}.", kind="lock", from_task=task_id)
         for dep in _live_dependents(conn, task_id)
+        if not _waits_for_grant(conn, dep, projects)
     ]
 
 
@@ -328,7 +347,8 @@ def peers() -> dict:
     """Running sessions an agent can talk to.
 
     ``tasks``: every task with a live session -- ``{id, title, project,
-    agent, locks, state, external, address}``; ``address`` is the Claude
+    agent, locks, waits, state, external, address}`` (``waits``: projects it
+    queued for, see :mod:`ntasker.lockqueue`); ``address`` is the Claude
     ``SendMessage`` target, ``None`` for other agents (use ``ntasker msg``).
     ``sessions``: Claude terminal sessions that belong to no task, reachable
     only with ``SendMessage`` (needs the ``session_discovery`` hook).
@@ -352,6 +372,9 @@ def peers() -> dict:
                     ids,
                 )
             }
+        waits: dict[int, list[str]] = {}
+        for r in conn.execute("SELECT task_id, project FROM lock_requests ORDER BY rowid"):
+            waits.setdefault(r["task_id"], []).append(r["project"])
         bound = {
             r["session_id"]
             for r in conn.execute("SELECT session_id FROM tasks WHERE session_id IS NOT NULL")
@@ -369,6 +392,7 @@ def peers() -> dict:
             "project": row["project"],
             "agent": resolve_agent_key(row["agent"]),
             "locks": locks.parse(row["locks"]),
+            "waits": waits.get(tid, []),
             "state": states.get(tid, "external"),
             "external": tid not in states,
             "address": _address(socket),

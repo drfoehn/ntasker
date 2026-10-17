@@ -70,7 +70,7 @@ from ntasker.projects import (
 )
 from ntasker.rundiff import changed_paths, parse_baselines, run_diff
 from ntasker.transcript import conversation_for, last_activity, question_entries
-from ntasker import completion, locks, messages, plugins, sessions, taskqueue, triage, worktrees
+from ntasker import completion, lockqueue, locks, messages, plugins, sessions, taskqueue, triage, worktrees
 from ntasker.newproject import created_projects
 from ntasker.newproject import router as newproject_router
 from ntasker import db as _db_module
@@ -2272,6 +2272,8 @@ def api_quick_run(payload: QuickRunIn) -> JSONResponse:
 
 class LocksIn(BaseModel):
     projects: list[str] = Field(..., min_length=1)
+    #: Held by another live task: queue for it instead of a 409 (see ntasker.lockqueue).
+    wait: bool = False
 
 
 def _occupied_ids() -> set[int]:
@@ -2282,20 +2284,22 @@ def _occupied_ids() -> set[int]:
 def _refuse_held(
     conn: sqlite3.Connection, task_id: int, own: str | None, wanted: list[str]
 ) -> None:
-    """409 when a task with a live session asks for a directory another live
-    task holds. A task without a session is not checked -- the worker decides
-    at start time."""
-    if task_id not in active_session_ids():
+    """409 when a task with a live session -- spawned or external -- asks for a
+    directory another live task holds. A task without a session is not checked
+    -- the worker decides at start time."""
+    live = _occupied_ids()
+    if task_id not in live:
         return
-    held = locks.held_dirs(conn, _occupied_ids())
+    held = locks.held_dirs(conn, live)
     by_dir = {locks.resolve_dir(n): n for n in wanted}
     hit = locks.conflict(set(by_dir), held, exclude=task_id)
     if hit is not None:
         raise HTTPException(
             status_code=409,
-            detail=_("{project} is held by task #{holder}").format(
-                project=by_dir[hit[0]], holder=hit[1]
-            ),
+            detail=_(
+                "{project} is held by task #{holder} -- `ntasker lock add {id} {project} --wait` "
+                "queues you for it"
+            ).format(project=by_dir[hit[0]], holder=hit[1], id=task_id),
         )
 
 
@@ -2397,12 +2401,26 @@ def api_add_locks(task_id: int, payload: LocksIn) -> JSONResponse:
 
     409 (naming the holder) when the task has a live session and another live
     task holds one of the requested directories. Returns the updated task.
+
+    With ``wait``, a held directory queues the task instead: ``202 {"waiting":
+    [{project, holder}]}``, the holder is told, and the worker grants the locks
+    once they are free (see :mod:`ntasker.lockqueue`). 409 on a deadlock.
     """
     with get_conn() as conn:
         row = conn.execute("SELECT project, locks FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=_("Task not found"))
         wanted = locks.normalize([*locks.parse(row["locks"]), *payload.projects], row["project"])
+        if payload.wait:
+            try:
+                _refuse_held(conn, task_id, row["project"], wanted)
+            except HTTPException:
+                new = [p for p in wanted if p not in locks.parse(row["locks"])]
+                try:
+                    waiting = lockqueue.request(conn, task_id, new, _occupied_ids())
+                except messages.MessageError as e:
+                    raise _message_error(e)
+                return JSONResponse({"waiting": waiting}, status_code=202)
         _refuse_held(conn, task_id, row["project"], wanted)
         conn.execute("UPDATE tasks SET locks = ? WHERE id = ?", (locks.dump(wanted), task_id))
         return _task_locks_response(conn, task_id)

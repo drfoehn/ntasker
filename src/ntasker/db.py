@@ -246,6 +246,16 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_task, delivered_at);
 
+-- A running task waiting for a directory lock another live task holds
+-- (``ntasker lock add --wait``, see ntasker.lockqueue). The queue worker grants
+-- it once the directory is free, oldest request first, and drops the row.
+CREATE TABLE IF NOT EXISTS lock_requests (
+    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    project TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (task_id, project)
+);
+
 -- One-paragraph summary per project, the triage's catalog. Generated lazily
 -- by ``claude -p`` on the first triage that needs it; the user can edit or
 -- regenerate it. A table (like hidden_projects) rather than settings keys so

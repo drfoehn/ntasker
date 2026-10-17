@@ -84,7 +84,7 @@ import contextlib
 import sqlite3
 import sys
 
-from ntasker import locks, messages, worktrees
+from ntasker import lockqueue, locks, messages, worktrees
 from ntasker.agents import agent_keys, get_spec, resolve_agent_key
 from ntasker.claude_runner import (
     active_session_ids,
@@ -471,8 +471,35 @@ def _kill_done(live: set[int], external: set[int]) -> None:
             stop_session(int(r["id"]))
 
 
+#: Tasks with a live session on the previous tick (see :func:`_notify_ended`).
+_was_live: set[int] = set()
+
+
+def _notify_ended(alive: set[int]) -> None:
+    """Sessions gone since the last tick give their project directory back.
+
+    A task still open (review, stopped, crashed) stops holding its own project
+    once its session ends (:func:`ntasker.locks.held_dirs`), so its live
+    dependents are told; a ``done`` one is told by :func:`_kill_done`.
+    """
+    global _was_live
+    gone = _was_live - alive
+    _was_live = set(alive)
+    if not gone:
+        return
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT id, project FROM tasks WHERE id IN ({','.join('?' * len(gone))}) "
+            "AND status != 'done' AND project IS NOT NULL",
+            list(gone),
+        ).fetchall()
+        for r in rows:
+            messages.notify_lock_released(conn, int(r["id"]), [r["project"]])
+
+
 def tick() -> None:
-    """One pass: kill the done, retire what is finished, start what is next. Never raises."""
+    """One pass: kill the done, grant waited-for locks, retire what is finished, start
+    what is next. Never raises."""
     global _booted
     from ntasker.settings import (  # noqa: PLC0415 -- lazy: avoid cycle
         get_dir_locks,
@@ -484,6 +511,11 @@ def tick() -> None:
     live = set(active_session_ids())
     external = set(external_session_ids())
     _kill_done(live, external)
+    _notify_ended(live | external)
+    # Freed directories go to the sessions queued for them first, before a
+    # queued task could start into them (see ntasker.lockqueue).
+    with get_conn() as conn:
+        lockqueue.grant(conn, live | external)
     worktrees.sweep(live | external)
     rows = load_queue()
     queued_ids = {int(r["id"]) for r in rows}

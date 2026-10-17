@@ -1515,14 +1515,26 @@ def _lock_request(args: argparse.Namespace, method: str, path: str, body: dict |
     if status >= 400:
         print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
         return 1
+    if "waiting" in data:
+        for w in data["waiting"]:
+            print(_("#{id} waits for {project} (held by #{holder})").format(
+                id=args.task_id, project=w["project"], holder=w["holder"]))
+        print(_("You get the lock automatically once it is free -- a message tells you. "
+                "End your turn and wait idle."))
+        return 0
     _print_locks(data)
     return 0
 
 
 def cmd_lock_add(args: argparse.Namespace) -> int:
-    """Grant extra directory locks -- all or nothing, 1 when a dir is held."""
+    """Grant extra directory locks -- all or nothing, 1 when a dir is held.
+
+    ``--wait``: a held directory queues the task for it instead (exit 0); the
+    worker grants it once free (see :mod:`ntasker.lockqueue`).
+    """
     return _lock_request(
-        args, "POST", f"/api/tasks/{args.task_id}/locks", {"projects": args.project}
+        args, "POST", f"/api/tasks/{args.task_id}/locks",
+        {"projects": args.project, "wait": args.wait},
     )
 
 
@@ -1727,6 +1739,8 @@ def cmd_peers(args: argparse.Namespace) -> int:
         mark = "*" if t["id"] == own else " "
         held = ", ".join([t["project"] or _("(cross)"), *t["locks"]])
         print(f"{mark}#{t['id']} {t['title']}  [{t['agent']}, {t['state']}]  {_('holds')}: {held}")
+        if t.get("waits"):
+            print(f"    {_('waits for')}: {', '.join(t['waits'])}")
         print("    " + (t["address"] or f'ntasker msg {t["id"]} "<text>"'))
     for sess in data["sessions"]:
         print(f"  {_('no task')}: {sess['project'] or sess['cwd']}")
@@ -1982,7 +1996,8 @@ def cmd_hook_pretooluse(args: argparse.Namespace) -> int:
     project = data.get("project") or target
     print(
         f"{target} is not locked by task #{task_id} -- run `ntasker lock add {task_id} {project}` "
-        f"if it is free, or leave it to a task in that project",
+        f"if it is free (`--wait` queues you for it if another task holds it), or leave it to a "
+        f"task in that project",
         file=sys.stderr,
     )
     return 2
@@ -3042,6 +3057,11 @@ def build_parser() -> argparse.ArgumentParser:
         lp.add_argument("task_id", type=_task_id)
         if with_projects:
             lp.add_argument("project", nargs="+")
+        if name == "add":
+            lp.add_argument(
+                "--wait", action="store_true",
+                help=_("Held by another running task: queue for it instead of failing."),
+            )
         # Server to talk to; default NTASKER_URL (set inside spawned sessions).
         lp.add_argument("--host", default=None)
         lp.add_argument("--port", type=int, default=None)

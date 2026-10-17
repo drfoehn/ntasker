@@ -42,7 +42,21 @@ With `dir_locks` off only the lane rule applies -- exactly the pre-3.1 behaviour
 
 A grant is **all or nothing** and immediate: when the task has a live session and another live task holds one of the
 requested directories, the request is refused with `409 "<project> is held by task #N"` (`ntasker lock add` prints
-that and exits 1). A task without a live session is not checked -- the worker decides at start time.
+that and exits 1). A task without a live session is not checked -- the worker decides at start time. "Live" means a
+session ntasker spawned or an external `/task` session.
+
+### Waiting for a held lock
+
+`ntasker lock add <id> <project...> --wait` (API: `"wait": true`) queues the task instead of failing:
+`202 {"waiting": [{project, holder}]}`, a `lock_requests` row per project, and a `wait` message to each holder. The
+queue worker grants the queued locks on the first tick all of them are free -- all or nothing, oldest request first,
+and before a queued task could start into the freed directory -- and messages the waiter (*nTasker granted you the
+lock on X*). A request of a session that ended is dropped. `ntasker peers` shows what a task waits for.
+
+A wait that would close a circle -- the holder already waits, directly or through others, for the requester; lock
+requests and dependencies (`ntasker wait-for`) both count -- is refused with `409 "deadlock: ..."`, nothing is queued,
+and the other side gets a message naming the circle. The two agents then agree who gives way (see
+[messaging.md](messaging.md#deadlocks)). Module: `src/ntasker/lockqueue.py`.
 
 `ntasker lock` talks to the server rather than the DB because the check needs the live session registry. It reads the
 server address from `--host/--port`, else from `NTASKER_URL` -- which `ntasker serve` sets in the environment of every
@@ -61,7 +75,8 @@ The task's **own** project directory is not a lock but a property of the task, s
 stays held while the session lives -- which is what keeps the lane busy during your review -- and stops counting once
 the task is `done` or the session is gone (`held_dirs`). Running sessions that wait for the task (`ntasker wait-for`)
 are told when it goes to review that the directory stays locked, and get a second message once the task is `done` --
-see [messaging.md](messaging.md#events).
+see [messaging.md](messaging.md#events). A session that ends while its task is still open frees the directory as well;
+the worker tells the live dependents on its next tick.
 
 A resumed run that needs a released directory again takes it with `ntasker lock add <id> <project>`, and is refused if
 someone else holds it by then. Manual release stays available: `ntasker lock rm`, `DELETE /api/tasks/<id>/locks/<p>`,
@@ -106,7 +121,8 @@ The lock hook refuses a tool call whose
 target lies inside another project's directory the task does not hold: exit 2 with
 
 ```
-<path> is not locked by task #N -- run `ntasker lock add N <project>` if it is free, or leave it to a task in that project
+<path> is not locked by task #N -- run `ntasker lock add N <project>` if it is free (`--wait` queues you for it if
+another task holds it), or leave it to a task in that project
 ```
 
 which Claude Code shows to the agent. For `Bash` only a leading `cd <dir>` is inspected (resolved against the hook's
@@ -125,7 +141,8 @@ have no settings flag and keep the heuristic.
 | File | Role |
 |---|---|
 | `src/ntasker/locks.py` | `parse`/`dump`/`normalize`, `resolve_dir`, `task_dirs`, `held_dirs`, `conflict`, `dirty_dir`, `project_for_path`. |
-| `src/ntasker/taskqueue.py` | `_lock_reason` (shared by the start step and `skipped`), the gate in `tick`. |
+| `src/ntasker/lockqueue.py` | `lock add --wait`: `request`, `grant` (worker), `deadlock`. |
+| `src/ntasker/taskqueue.py` | `_lock_reason` (shared by the start step and `skipped`), the gate and the grant in `tick`. |
 | `src/ntasker/app.py` | `locks` on create/update, `/api/tasks/<id>/locks`, `/api/locks/check`, the release in `/api/tasks/<id>/outcome`, `skipped` in `/api/queue`. |
 | `src/ntasker/cli.py` | `ntasker lock add\|rm\|list`, `--locks` on `add`/`patch`, `ntasker hook waiting\|running\|ask\|pretooluse`. |
 | `src/ntasker/claude_assets/hooks/*.json`, `claude_assets.hooks_settings_path` | The two `--settings` files and which one a spawn gets. |

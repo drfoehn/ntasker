@@ -97,8 +97,8 @@ def test_wait_for_adds_dependency_and_tells_the_holder(env):
     (msg,) = _rows(b)
     assert msg["kind"] == "wait" and msg["from_task"] == a
     assert "I need repo X" in msg["body"] and f"ntasker finish {b}" in msg["body"]
-    # The reverse would be a cycle.
-    assert env.post(f"/api/tasks/{b}/wait", json={"on": a}).status_code == 400
+    # The reverse would be a cycle -- a deadlock.
+    assert env.post(f"/api/tasks/{b}/wait", json={"on": a}).status_code == 409
 
 
 def test_finishing_wakes_live_dependents_once(env):

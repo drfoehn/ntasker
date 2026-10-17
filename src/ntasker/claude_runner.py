@@ -290,9 +290,17 @@ MESSAGING_RULES = """\
 - `ntasker peers` lists the running sessions: task, project, locks and, for
   Claude Code, its address. Message a Claude peer with SendMessage to that
   address; any other peer with `ntasker msg <task> "<text>"`.
-- Your work needs a repo another running task holds, or its result:
-  `ntasker wait-for <task> "<why>"` -- it becomes your dependency and is told
-  you wait. Then end your turn and wait idle; you are woken once it is finished.
+- Your work needs a repo another running task holds:
+  `ntasker lock add {id} <project> --wait` -- you are queued for its lock, the
+  holder is told, and you get the lock automatically once it is free. End your
+  turn and wait idle; a message wakes you.
+- Your work needs another task's result: `ntasker wait-for <task> "<why>"` --
+  it becomes your dependency and is told you wait. End your turn and wait idle;
+  you are woken once it is finished.
+- A wait that would deadlock (the other task already waits for you) is
+  refused, and both of you are told. Agree with the peer who gives way: the
+  one less far along releases its lock (`ntasker lock rm {id} <project>`) or
+  finishes first, the other waits.
 - A peer waits for you: once your work is done and you may commit, commit and
   run `ntasker finish {id}` -- that releases your locks and wakes the peer. If
   something is still open with the user, release nothing: tell the peer once
