@@ -4,6 +4,9 @@ All notable changes to ntasker.
 
 Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
+## [3.17.0] — 2026-10-17
+Agent sessions message each other and queue for project locks; interrupt and queue replies in Verlauf.
+
 ## [3.16.2] — 2026-10-16
 Queue: run button on the task card; agent logo next to the task id.
 
