@@ -49,6 +49,7 @@ from ntasker.claude_runner import (
     active_session_ids,
     bind_session,
     external_session_ids,
+    idle_session_ids,
     open_questions,
     planner_seed,
     projects_base_dir,
@@ -678,6 +679,14 @@ def build_js_strings() -> dict[str, str]:
         "conv_send_fresh": _("Send using fresh context"),
         "conv_send_fresh_hint": _("Clear the conversation context first, then send the message into the fresh one"),
         "conv_image_remove": _("Remove image"),
+        "conv_queue_title": _("Waiting -- goes in once the agent is done"),
+        "conv_queue_now": _("Send now"),
+        "conv_queue_now_hint": _("Hand it to the agent right away -- it takes it in at its next step"),
+        "conv_queue_sent": _("Handed over"),
+        "conv_queue_remove": _("Remove from the queue"),
+        "conv_queue_fresh": _("Fresh context"),
+        "conv_queue_images": _("Images: {n}"),
+        "conv_injected": _("Sent while it worked"),
         "conv_views": _("Run views"),
         "conv_terminal": _("Terminal"),
         "conv_report_side": _("Show the report beside the current view"),
@@ -1791,7 +1800,9 @@ def api_claude_sessions() -> JSONResponse:
     the status line on a running task's card; only agents with a transcript.
     ``questions``: the question each waiting session asks right now (id ->
     ``{id, questions}``, see :func:`api_claude_session_question`) -- the
-    conversation pane's question card.
+    conversation pane's question card. ``idle``: the waiting sessions whose turn
+    is over (see :func:`ntasker.claude_runner.idle_session_ids`) -- the run
+    view sends its queued prompts only to those.
     """
     states = session_states()
     active = list(states.keys())
@@ -1830,6 +1841,7 @@ def api_claude_sessions() -> JSONResponse:
             "titles": titles,
             "activity": activity,
             "questions": open_questions(),
+            "idle": idle_session_ids(states),
         }
     )
 
@@ -1983,6 +1995,7 @@ def api_claude_session_adopt(task_id: int, payload: AdoptSessionIn) -> JSONRespo
 
 class SessionStateIn(BaseModel):
     waiting: bool
+    turn_over: bool = False
 
 
 @app.post("/api/claude/sessions/{task_id}/state")
@@ -1991,11 +2004,12 @@ def api_claude_session_state(task_id: int, payload: SessionStateIn) -> JSONRespo
 
     Called by ``ntasker hook waiting|running`` from inside a Claude Code
     session (``Stop`` / permission ``Notification`` -> waiting,
-    ``UserPromptSubmit`` / ``PostToolUse`` -> running). Overrides the silence
+    ``UserPromptSubmit`` / ``PostToolUse`` -> running; ``turn_over`` marks the
+    ``Stop``). Overrides the silence
     heuristic for that session -- see :func:`ntasker.claude_runner.session_states`.
     404 when the task has no live session.
     """
-    if not set_hook_state(task_id, payload.waiting):
+    if not set_hook_state(task_id, payload.waiting, payload.turn_over):
         raise HTTPException(status_code=404, detail=_("No live session for this task"))
     return JSONResponse({"ok": True})
 

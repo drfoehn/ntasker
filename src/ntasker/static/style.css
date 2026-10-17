@@ -960,6 +960,24 @@ span.task-activity {
     border: 1px solid var(--tblr-border-color);
     border-radius: var(--tblr-border-radius);
 }
+/* Replies waiting for the agent's turn to end, above the reply box. */
+.conv-queue-item {
+    padding: 0.25rem 0.5rem;
+    border: 1px dashed var(--tblr-border-color);
+    border-radius: var(--tblr-border-radius);
+    margin-bottom: 0.25rem;
+    min-width: 0;
+}
+.conv-queue-item.is-sent {
+    opacity: 0.6;
+}
+/* A reply the agent took in mid-turn, inside that turn's answer. */
+.claude-conv-injected {
+    padding: 0.375rem 0.5rem;
+    border-left: 3px solid var(--tblr-primary);
+    background: var(--tblr-bg-surface-secondary);
+    border-radius: var(--tblr-border-radius);
+}
 .conv-thumb .btn-close {
     position: absolute;
     top: 2px;

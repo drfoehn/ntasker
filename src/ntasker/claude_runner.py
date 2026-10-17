@@ -434,6 +434,10 @@ class TermSession:
     # (``ntasker hook waiting|running``, see :func:`set_hook_state`). ``None``
     # until the first hook fires -- then the silence heuristic decides.
     hook_waiting: bool | None = None
+    # The agent ended its turn (``Stop`` hook) and sits at an empty prompt --
+    # unlike a "waiting" that is a permission dialog. Only then may the run
+    # view type the next queued prompt in. Cleared by any other hook report.
+    turn_over: bool = False
     # The question the agent is asking right now (``AskUserQuestion``), as its
     # ``PreToolUse`` hook reported it: ``{id, questions}`` with the questions
     # in :func:`ntasker.transcript.question_entries` form. ``None`` while
@@ -496,12 +500,17 @@ def external_session_ids() -> list[int]:
     return list(EXTERNAL)
 
 
-def set_hook_state(task_id: int, waiting: bool) -> bool:
-    """Record the explicit state a session's hook reported. ``False`` = no live session."""
+def set_hook_state(task_id: int, waiting: bool, turn_over: bool = False) -> bool:
+    """Record the explicit state a session's hook reported. ``False`` = no live session.
+
+    ``turn_over``: the report came from the ``Stop`` hook -- the agent is done
+    with its turn, not blocked on a dialog (see :func:`idle_session_ids`).
+    """
     sess = SESSIONS.get(task_id)
     if sess is None or not sess.alive:
         return False
     sess.hook_waiting = waiting
+    sess.turn_over = waiting and turn_over
     if not waiting:
         sess.question = None
     return True
@@ -519,6 +528,7 @@ def set_question(task_id: int, question: dict | None) -> bool:
     sess.question = question
     if question is not None:
         sess.hook_waiting = True
+        sess.turn_over = False
     return True
 
 
@@ -556,6 +566,36 @@ def session_states() -> dict[int, str]:
         return "waiting" if now - s.last_output >= idle else "running"
 
     return {tid: state(s) for tid, s in SESSIONS.items() if s.alive}
+
+
+def _note_interrupt(sess: TermSession, data: str) -> None:
+    """A lone Esc into a working Claude session interrupts its turn.
+
+    Claude Code fires no ``Stop`` hook for an interrupted turn, so without this
+    the session would read "running" until the next prompt -- and the run
+    view's queued replies would never go in. (Arrow keys etc. arrive as longer
+    escape sequences, never as a single Esc.)
+    """
+    if data == "\x1b" and sess.hook_waiting is False:
+        sess.hook_waiting = True
+        sess.turn_over = True
+
+
+def idle_session_ids(states: dict[int, str]) -> list[int]:
+    """Waiting sessions that sit at an empty prompt, ready for the next one.
+
+    ``states`` is :func:`session_states`' answer. A session with hooks counts
+    once its ``Stop`` hook reported the turn over -- a permission dialog or a
+    question is "waiting" too, but a prompt typed into it would answer it.
+    Without hooks (OpenCode / Pi) the silence heuristic is all there is.
+    """
+    return [
+        tid
+        for tid, st in states.items()
+        if st == "waiting"
+        and (s := SESSIONS.get(tid)) is not None
+        and (s.turn_over or s.hook_waiting is None)
+    ]
 
 
 def _clean_env(spec: AgentSpec, task_id: int, project: str | None = None) -> dict:
@@ -1091,7 +1131,9 @@ async def serve(websocket: WebSocket, task_id: int) -> None:
             msg = await websocket.receive_json()
             kind = msg.get("type")
             if kind == "input" and sess.alive:
-                await _write_pty(sess, str(msg.get("data", "")).encode("utf-8", "ignore"))
+                data = str(msg.get("data", ""))
+                await _write_pty(sess, data.encode("utf-8", "ignore"))
+                _note_interrupt(sess, data)
             elif kind == "file" and sess.alive:
                 # A file dropped onto the terminal: decode, cap, save, then paste
                 # its quoted path (+ trailing space) into the PTY as a bracketed

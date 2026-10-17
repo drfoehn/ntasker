@@ -87,9 +87,11 @@ def test_state_hooks_post(monkeypatch, fake_server):
     calls, _ = fake_server
     assert _run(monkeypatch, ["waiting"], {}) == 0
     assert _run(monkeypatch, ["running"], {}) == 0
+    assert _run(monkeypatch, ["waiting"], {"hook_event_name": "Stop"}) == 0
     assert calls == [
-        ("POST", "/api/claude/sessions/7/state", {"waiting": True}),
-        ("POST", "/api/claude/sessions/7/state", {"waiting": False}),
+        ("POST", "/api/claude/sessions/7/state", {"waiting": True, "turn_over": False}),
+        ("POST", "/api/claude/sessions/7/state", {"waiting": False, "turn_over": False}),
+        ("POST", "/api/claude/sessions/7/state", {"waiting": True, "turn_over": True}),
     ]
 
 
@@ -156,6 +158,36 @@ def test_open_question_lives_until_the_session_runs_again():
         claude_runner.set_hook_state(1, False)                   # answered: PostToolUse
         assert claude_runner.open_questions() == {}
         assert claude_runner.set_question(99, q) is False
+    finally:
+        claude_runner.SESSIONS.clear()
+
+
+def test_idle_only_once_the_turn_is_over():
+    """A permission dialog or question waits too, but only a ``Stop`` (or an Esc) is idle."""
+    claude_runner.SESSIONS.clear()
+    sess = claude_runner.TermSession(task_id=1, proc=_Proc(), master_fd=-1)  # type: ignore[arg-type]
+    claude_runner.SESSIONS[1] = sess
+
+    def idle():
+        return claude_runner.idle_session_ids(claude_runner.session_states())
+
+    try:
+        sess.last_output = time.monotonic() - 3600
+        assert idle() == [1]                                     # no hooks: silence decides
+        claude_runner.set_hook_state(1, True)                    # permission notification
+        assert idle() == []
+        claude_runner.set_hook_state(1, True, turn_over=True)    # Stop
+        assert idle() == [1]
+        claude_runner.set_question(1, {"id": "q", "questions": []})
+        assert idle() == []
+        claude_runner.set_hook_state(1, False)                   # working again
+        claude_runner._note_interrupt(sess, "\x1b[A")            # an arrow key
+        assert idle() == []
+        claude_runner._note_interrupt(sess, "\x1b")              # Esc interrupts the turn
+        assert idle() == [1]
+        claude_runner.set_hook_state(1, True)
+        claude_runner._note_interrupt(sess, "\x1b")              # Esc into a dialog: no turn end
+        assert idle() == []
     finally:
         claude_runner.SESSIONS.clear()
 

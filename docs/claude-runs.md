@@ -298,6 +298,22 @@ next `running` hook (the answer, or a new prompt) clears it. Answered questions 
 with the picked options highlighted and a typed answer quoted (from the transcript's `toolUseResult.answers`); a
 cancelled dialog reads *Not answered*.
 
+**Reply queue.** A reply sent while the agent works -- or while a dialog is open, or other replies still wait -- is not
+typed in at once: it waits in a list above the reply box (text, image count, *Fresh context* badge) and goes in once
+the turn is over, one reply per turn, in order. The list lives in the browser tab (`convQueue` in `app.js`), so it
+needs the run view open; a session that ends drops its list. "Turn over" is the server's `idle` list in
+`GET /api/claude/sessions`: a waiting session whose `Stop` hook fired (`ntasker hook waiting` reports
+`turn_over: true` for `hook_event_name == "Stop"`), not one waiting on a permission dialog or a question -- typed into
+those, a reply would answer them. A lone `Esc` into a working session counts as turn over too, since Claude Code fires
+no `Stop` hook for an interrupted turn. Agents without hooks fall back to the silence heuristic.
+
+*Send now* forces one reply in mid-turn -- what typing into the terminal does: Claude Code queues it itself and hands
+it to the agent at its next step, inside the running turn (transcript: a `queue-operation` `enqueue`, later `remove`
+with reason `absorbed_mid_turn`, and an `attachment` of type `queued_command` with `origin.kind == "human"`). The entry
+stays listed as *Handed over* until the conversation shows it: such absorbed prompts appear in their turn as *Sent
+while it worked* blocks (`injected` in the turn, see `_typed_mid_turn` in `transcript.py`). A fresh-context reply has
+no *Send now* -- a `/clear` mid-turn makes no sense.
+
 Parsing (`src/ntasker/transcript.py`) happens on the server per poll (`GET /api/tasks/<id>/conversation`, every
 2.5 s while the pane is on screen); an unchanged file is answered from a small in-process cache keyed on its mtime
 and size.

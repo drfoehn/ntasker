@@ -53,6 +53,10 @@ const RUN_MODE_DEFAULT = 'split';
 // How long a `/clear` gets to reset the session before "Send using fresh
 // context" types the reply into it -- typed too early, it can get lost.
 const CLEAR_SETTLE_MS = 3000;
+// A queued reply typed in at the end of a turn needs a poll or two before the
+// server reports the session busy again -- no second one goes in meanwhile.
+const QUEUE_RESEND_MS = 8000;
+let _convQueueSeq = 0;
 const RUN_PANE_WIDTH_DEFAULT = 480;
 const RUN_PANE_WIDTH_MIN = 260;
 const RUN_PANE_WIDTH_MAX = 1400;
@@ -426,6 +430,9 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // Subset of claudeSessions that has gone silent long enough to look
         // blocked on a prompt -- drives the "waiting for input" highlight.
         claudeWaiting: [],
+        // Subset of claudeWaiting whose turn is over (an empty prompt, not a
+        // dialog) -- only those get the next queued reply.
+        claudeIdle: [],
         // Task ids worked on by a session ntasker did not start (`/task` in a
         // terminal). No tab, no PTY -- the card is locked until it ends.
         claudeExternal: [],
@@ -499,6 +506,12 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // Images pasted / dropped into the reply box, shown as thumbnails until
         // the reply is sent ({file, url} -- url is an object URL for the <img>).
         convImages: [],
+        // Replies sent while the agent works, per task ({taskId: [{key, text,
+        // images, fresh, sent}]}), shown above the reply box. One goes in each
+        // time the turn is over; "Send now" hands one over at once (sent=true
+        // until the transcript shows it arrived).
+        convQueue: {},
+        _convQueueSentAt: {},
         convDragOver: false,
         convUsage: null,
         // What stops the session right now ({kind, text, at}: usage limit, not
@@ -3700,10 +3713,12 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                     this.claudeSessions = d.active || [];
                     this.claudeWaiting = d.waiting || [];
                     this.claudeQuestions = d.questions || {};
+                    this.claudeIdle = d.idle || [];
                     this.claudeExternal = d.external || [];
                     this.claudeSessionProjects = d.projects || {};
                     this.claudeSessionTitles = d.titles || {};
                     this._syncTabsFromSessions();
+                    this._flushConvQueues();
                 }
             } catch (_e) { /* leave the last known set */ }
         },
@@ -4239,6 +4254,9 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             try { s.ws.close(); } catch (_e) { /* already closing */ }
             try { s.term.dispose(); } catch (_e) { /* already disposed */ }
             _claudeTerms.delete(id);
+            // Nowhere left to send its queued replies.
+            (this.convQueue[id] || []).forEach(e => this._revokeImages(e.images));
+            delete this.convQueue[id];
         },
 
         // Drop a tab immediately (tear down its terminal + remove it) and move to
@@ -4264,8 +4282,8 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // Type a canned prompt into the active session and submit it. The Enter
         // goes out on its own tick so the agent's input line sees "text, then
         // Return" instead of one pasted block with a trailing newline.
-        sendQuickPrompt(prompt) {
-            const s = _claudeTerms.get(this.claudeView);
+        sendQuickPrompt(prompt, id = this.claudeView) {
+            const s = _claudeTerms.get(id);
             if (!s || s.ws.readyState !== WebSocket.OPEN) return false;
             // Multi-line text goes in as a bracketed paste, so its newlines land
             // in the input line instead of each one submitting a fragment.
@@ -4274,7 +4292,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             setTimeout(() => {
                 if (s.ws.readyState === WebSocket.OPEN) s.ws.send(JSON.stringify({ type: 'input', data: '\r' }));
             }, 50);
-            if (!this.runChatShown) s.term.focus();
+            if (id === this.claudeView && !this.runChatShown) s.term.focus();
             return true;
         },
 
@@ -4423,6 +4441,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                     decisions,
                 };
             });
+            this._pruneSentQueued(id);
             if (atBottom) {
                 this.$nextTick(() => {
                     const el = this.$refs.convBody;
@@ -4708,33 +4727,116 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         },
 
         // The pane's reply box: typed into the live session like a quick prompt.
-        // Images go first: each is shipped like a file dropped onto the
-        // terminal (the server saves it and types its path into the input
-        // line), then the text follows and Enter submits both together.
-        // `fresh`: the Send button's "fresh context" option -- a `/clear` goes in
-        // first, the reply follows into the new context once it has settled.
+        // Unless the turn is over (agent working, a dialog open, replies
+        // already waiting) it joins the task's queue instead -- typed in
+        // mid-turn, Claude Code would hand it to the agent at its next step,
+        // and a dialog would take it as its answer.
         async sendConvReply(fresh = false) {
             const text = this.convReply.trim();
             const images = this.convImages;
             if (!text && !images.length) return;
-            const s = _claudeTerms.get(this.claudeView);
-            if (!s || s.ws.readyState !== WebSocket.OPEN) return;
+            const id = this.claudeView;
+            const queue = this.convQueue[id] || [];
+            if (queue.some(e => !e.sent) || !this.claudeIdle.includes(id)) {
+                this.convQueue[id] = [...queue, { key: ++_convQueueSeq, text, images, fresh, sent: false }];
+                this.convReply = '';
+                this.convImages = [];   // the entry owns the object URLs now
+                this._flushConvQueues();
+                return;
+            }
+            if (await this._sendReply(id, { text, images, fresh })) {
+                this.convReply = '';
+                this.clearConvImages();
+            }
+        },
+
+        // Type one reply into a task's session. Images go first: each is
+        // shipped like a file dropped onto the terminal (the server saves it
+        // and types its path into the input line), then the text follows and
+        // Enter submits both together. `fresh`: the Send button's "fresh
+        // context" option -- a `/clear` goes in first, the reply follows into
+        // the new context once it has settled. False when the session is gone.
+        async _sendReply(id, { text, images, fresh }) {
+            const s = _claudeTerms.get(id);
+            if (!s || s.ws.readyState !== WebSocket.OPEN) return false;
             if (fresh) {
-                this.sendQuickPrompt('/clear');
+                this.sendQuickPrompt('/clear', id);
                 await new Promise(resolve => setTimeout(resolve, CLEAR_SETTLE_MS));
-                if (s.ws.readyState !== WebSocket.OPEN) return;
+                if (s.ws.readyState !== WebSocket.OPEN) return false;
             }
             if (images.length) {
                 const payloads = await Promise.all(images.map(img => _fileToBase64(img.file)));
-                if (s.ws.readyState !== WebSocket.OPEN) return;
+                if (s.ws.readyState !== WebSocket.OPEN) return false;
                 images.forEach((img, i) => {
                     s.ws.send(JSON.stringify({ type: 'file', name: img.file.name || 'image.png', data: payloads[i] }));
                 });
             }
-            if (this.sendQuickPrompt(text)) {
-                this.convReply = '';
-                this.clearConvImages();
+            if (!this.sendQuickPrompt(text, id)) return false;
+            // Pick up the busy state soon, so a quick second reply queues.
+            setTimeout(() => this.loadClaudeSessions(), 400);
+            return true;
+        },
+
+        // The active tab's queued replies.
+        get convQueueActive() {
+            return this.convQueue[this.claudeView] || [];
+        },
+
+        // Send the next queued reply of every session whose turn is over --
+        // one per turn, the rest wait for the next. Runs on each session poll
+        // that changed something.
+        _flushConvQueues() {
+            const now = Date.now();
+            for (const id of this.claudeIdle) {
+                if (!this.convQueue[id]?.length) continue;
+                // Handed over, yet the turn ended: it went in, whatever the
+                // transcript shows.
+                const queue = (this.convQueue[id] || []).filter(e => !e.sent);
+                this.convQueue[id] = queue;
+                if (!queue.length || now - (this._convQueueSentAt[id] || 0) < QUEUE_RESEND_MS) continue;
+                this._convQueueSentAt[id] = now;
+                const [next, ...rest] = queue;
+                this.convQueue[id] = rest;
+                this._sendReply(id, next).then(ok => {
+                    if (ok) this._revokeImages(next.images);
+                    else this.convQueue[id] = [next, ...(this.convQueue[id] || [])];
+                });
             }
+        },
+
+        // "Send now": type a queued reply in at once. Claude Code hands it to
+        // the agent at its next step, inside the running turn (as when typed
+        // into the terminal); it stays listed as handed over until the
+        // conversation shows it.
+        async sendQueuedNow(key) {
+            const id = this.claudeView;
+            const entry = (this.convQueue[id] || []).find(e => e.key === key);
+            if (!entry || entry.sent) return;
+            entry.sent = true;
+            if (await this._sendReply(id, entry)) this._revokeImages(entry.images);
+            else entry.sent = false;
+        },
+
+        removeQueued(key) {
+            const id = this.claudeView;
+            const queue = this.convQueue[id] || [];
+            const entry = queue.find(e => e.key === key);
+            if (entry) this._revokeImages(entry.images);
+            this.convQueue[id] = queue.filter(e => e.key !== key);
+        },
+
+        // Drop the handed-over replies the conversation shows by now -- as a
+        // prompt or as taken in mid-turn. (Text only: an image arrives as its
+        // path in front of the text.)
+        _pruneSentQueued(id) {
+            const queue = this.convQueue[id];
+            if (!queue || !queue.some(e => e.sent)) return;
+            const seen = this.convTurns.flatMap(t => [t.prompt || '', ...(t.injected || []).map(x => x.text)]);
+            this.convQueue[id] = queue.filter(e => !e.sent || !seen.some(x => x.includes(e.text)));
+        },
+
+        _revokeImages(images) {
+            images.forEach(img => URL.revokeObjectURL(img.url));
         },
 
         // Queue pasted / dropped image files as thumbnails below the reply box.

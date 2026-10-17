@@ -252,3 +252,25 @@ def test_api_sessions_reports_activity(client, monkeypatch):
     monkeypatch.setattr("ntasker.app.session_states", lambda: {tid: "running"})
     d = client.get("/api/claude/sessions").json()
     assert d["activity"] == {str(tid): {"name": "Bash", "kind": "bash", "detail": "rm -rf build", "file": None}}
+
+
+def _queued(prompt, origin="human", mode="prompt"):
+    att = {"type": "queued_command", "prompt": prompt, "commandMode": mode, "origin": {"kind": origin}}
+    return json.dumps({"type": "attachment", "attachment": att, "timestamp": "2026-09-27T10:05:00Z"})
+
+
+def test_prompt_typed_mid_turn_is_kept_with_its_turn():
+    turns = parse_transcript([
+        _ev("user", "go"),
+        _ev("assistant", [{"type": "text", "text": "Working."}], id="m1", stop_reason="tool_use"),
+        _queued("and commit afterwards"),
+        _queued([{"type": "text", "text": "with a list"}]),
+        _queued("<task-notification>x</task-notification>", origin="task-notification", mode="task-notification"),
+        _ev("assistant", [{"type": "text", "text": "Done."}], id="m2", stop_reason="end_turn"),
+    ])
+    assert len(turns) == 1
+    assert turns[0]["injected"] == [
+        {"text": "and commit afterwards", "at": "2026-09-27T10:05:00Z"},
+        {"text": "with a list", "at": "2026-09-27T10:05:00Z"},
+    ]
+    assert turns[0]["answer"] == "Done."

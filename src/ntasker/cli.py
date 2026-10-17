@@ -1719,7 +1719,9 @@ def _hook_state(waiting: bool) -> int:
     if not waiting and payload.get("agent_id"):
         return 0
     with contextlib.suppress(Exception):
-        _api_call(base, "POST", f"/api/claude/sessions/{task_id}/state", {"waiting": waiting}, 2.0)
+        # ``Stop`` ends the turn; the permission ``Notification`` waits on a dialog.
+        body = {"waiting": waiting, "turn_over": payload.get("hook_event_name") == "Stop"}
+        _api_call(base, "POST", f"/api/claude/sessions/{task_id}/state", body, 2.0)
     return 0
 
 

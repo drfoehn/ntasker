@@ -116,6 +116,25 @@ def _user_text(content) -> str | None:
     return text
 
 
+def _typed_mid_turn(ev: dict) -> str | None:
+    """The text of a prompt the user typed while the agent worked, or ``None``.
+
+    Claude Code queues such a prompt and hands it to the agent at its next
+    step, inside the running turn -- not as a user event but as a
+    ``queued_command`` attachment. Background-task notices travel the same
+    way; only a human ``prompt`` counts.
+    """
+    if ev.get("type") != "attachment":
+        return None
+    att = ev.get("attachment")
+    if not isinstance(att, dict) or att.get("type") != "queued_command" or att.get("isMeta"):
+        return None
+    origin = att.get("origin")
+    if att.get("commandMode") != "prompt" or not isinstance(origin, dict) or origin.get("kind") != "human":
+        return None
+    return _user_text(att.get("prompt"))
+
+
 def _strip_seed(text: str, rules: Iterable[str]) -> tuple[str, bool]:
     """Reduce a queue seed to its body; ``(text, is_seed)``.
 
@@ -277,7 +296,9 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
       agent event's timestamp;
     * ``blocker`` -- what keeps the agent from working (usage limit, not logged
       in, API unreachable ...), see :func:`_blocker`, or ``None``. It is the
-      turn's last word only: output after it means the work went on.
+      turn's last word only: output after it means the work went on;
+    * ``injected`` -- ``[{text, at}]``: what the user typed while the turn ran
+      and the agent took in mid-turn (see :func:`_typed_mid_turn`).
 
     Agent output before the first prompt is dropped. Malformed lines are
     skipped -- the file is being appended to while we read it. Claude Code
@@ -296,6 +317,11 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
         except (ValueError, TypeError):
             continue
         if not isinstance(ev, dict) or ev.get("isSidechain") or ev.get("isMeta"):
+            continue
+        typed = _typed_mid_turn(ev)
+        if typed is not None:
+            if turns:
+                turns[-1]["injected"].append({"text": typed, "at": ev.get("timestamp")})
             continue
         msg = ev.get("message")
         if not isinstance(msg, dict):
@@ -329,6 +355,7 @@ def parse_transcript(lines, rules: Iterable[str] = ()) -> list[dict]:
                 "usage": _new_usage(),
                 "answer_at": None,
                 "blocker": None,
+                "injected": [],
             })
             texts.append([])
         elif kind == "assistant" and turns:
