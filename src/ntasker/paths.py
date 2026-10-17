@@ -56,7 +56,7 @@ def warn_if_missing(path: Path) -> None:
     """
     if not path.exists():
         print(
-            f"ntasker: DB nicht gefunden bei {path}.\n"
+            f"nTasker: DB nicht gefunden bei {path}.\n"
             "         Ausfuehren: `ntasker init`",
             file=sys.stderr,
         )

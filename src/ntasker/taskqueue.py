@@ -663,7 +663,7 @@ def tick() -> None:
         except worktrees.WorktreeError as e:
             # No checkout, no run: flag the entry ended like a crashed run, so
             # it waits for the user instead of retrying git every tick.
-            print(f"ntasker: task #{task_id} not started, worktree failed: {e}", file=sys.stderr)
+            print(f"nTasker: task #{task_id} not started, worktree failed: {e}", file=sys.stderr)
             with get_conn() as conn:
                 conn.execute("UPDATE tasks SET session_ended_at = ? WHERE id = ?", (_now(), task_id))
             RESUME.discard(task_id)

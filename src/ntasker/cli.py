@@ -264,7 +264,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     from ntasker import db as _db  # noqa: PLC0415  -- read module-level DB_PATH
 
     init_db()
-    print(_("ntasker: DB initialised at {path}").format(path=_db.DB_PATH))
+    print(_("nTasker: DB initialised at {path}").format(path=_db.DB_PATH))
     return 0
 
 
@@ -412,13 +412,13 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if getattr(args, "detach", False):
         if args.reload:
             print(
-                _("ntasker: --detach and --reload are mutually exclusive."),
+                _("nTasker: --detach and --reload are mutually exclusive."),
                 file=sys.stderr,
             )
             return 2
         if _healthz_ok(args.host, args.port):
             print(
-                _("ntasker: server already running on {host}:{port}").format(
+                _("nTasker: server already running on {host}:{port}").format(
                     host=args.host, port=args.port
                 )
             )
@@ -430,7 +430,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         while time.monotonic() < deadline:
             if _healthz_ok(args.host, args.port):
                 print(
-                    _("ntasker: started detached on {host}:{port} (pid {pid})").format(
+                    _("nTasker: started detached on {host}:{port} (pid {pid})").format(
                         host=args.host, port=args.port, pid=pid
                     )
                 )
@@ -438,7 +438,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
             time.sleep(0.1)
         print(
             _(
-                "ntasker: detached child (pid {pid}) did not answer /healthz "
+                "nTasker: detached child (pid {pid}) did not answer /healthz "
                 "within 3s on {host}:{port}"
             ).format(pid=pid, host=args.host, port=args.port),
             file=sys.stderr,
@@ -448,7 +448,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     try:
         import uvicorn  # noqa: PLC0415  -- lazy import on purpose
     except ImportError:
-        print(_("ntasker: uvicorn not installed. `pip install ntasker[serve]`"), file=sys.stderr)
+        print(_("nTasker: uvicorn not installed. `pip install ntasker[serve]`"), file=sys.stderr)
         return 2
     # Make sure schema exists -- avoid first-request 500s on a fresh DB.
     init_db()
@@ -501,15 +501,15 @@ def cmd_stop(args: argparse.Namespace) -> int:
         if listening:
             print(
                 _(
-                    "ntasker: something is listening on {host}:{port} but does not "
-                    "answer /healthz -- probably a pre-v1.4.0 ntasker or a foreign "
+                    "nTasker: something is listening on {host}:{port} but does not "
+                    "answer /healthz -- probably a pre-v1.4.0 nTasker or a foreign "
                     "process. Kill it manually (POSIX: `pkill -f 'ntasker serve'`)."
                 ).format(host=args.host, port=args.port),
                 file=sys.stderr,
             )
             return 1
         print(
-            _("ntasker: no server running on {host}:{port}").format(
+            _("nTasker: no server running on {host}:{port}").format(
                 host=args.host, port=args.port
             )
         )
@@ -525,7 +525,7 @@ def cmd_stop(args: argparse.Namespace) -> int:
         msg = str(exc).lower()
         if "connection" not in msg and "reset" not in msg:
             print(
-                _("ntasker: shutdown request failed: {exc}").format(exc=exc),
+                _("nTasker: shutdown request failed: {exc}").format(exc=exc),
                 file=sys.stderr,
             )
             return 1
@@ -536,7 +536,7 @@ def cmd_stop(args: argparse.Namespace) -> int:
     while time.monotonic() < deadline:
         if not _healthz_ok(args.host, args.port, timeout=0.2):
             print(
-                _("ntasker: server on {host}:{port} stopped.").format(
+                _("nTasker: server on {host}:{port} stopped.").format(
                     host=args.host, port=args.port
                 )
             )
@@ -544,7 +544,7 @@ def cmd_stop(args: argparse.Namespace) -> int:
         time.sleep(0.1)
 
     print(
-        _("ntasker: server on {host}:{port} still answering after 3s -- giving up.").format(
+        _("nTasker: server on {host}:{port} still answering after 3s -- giving up.").format(
             host=args.host, port=args.port
         ),
         file=sys.stderr,
@@ -589,7 +589,7 @@ def cmd_restart(args: argparse.Namespace) -> int:
 
     if not foreground and not addressed and service.service_installed():
         if not service.restart_service():
-            print(_("ntasker: could not restart the installed service."), file=sys.stderr)
+            print(_("nTasker: could not restart the installed service."), file=sys.stderr)
             return 1
         # The supervisor restarts asynchronously; confirm it actually came back
         # rather than reporting success into a crash loop.
@@ -597,7 +597,7 @@ def cmd_restart(args: argparse.Namespace) -> int:
         while time.monotonic() < deadline:
             if _healthz_ok(args.host, args.port, timeout=0.3):
                 print(
-                    _("ntasker: service restarted on {host}:{port}").format(
+                    _("nTasker: service restarted on {host}:{port}").format(
                         host=args.host, port=args.port
                     )
                 )
@@ -605,7 +605,7 @@ def cmd_restart(args: argparse.Namespace) -> int:
             time.sleep(0.2)
         print(
             _(
-                "ntasker: the service was restarted but nothing answers on "
+                "nTasker: the service was restarted but nothing answers on "
                 "{host}:{port}. Check `ntasker service status`."
             ).format(host=args.host, port=args.port),
             file=sys.stderr,
@@ -635,7 +635,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM tasks WHERE id = ?", (args.task_id,)).fetchone()
         if row is None:
-            print(_("ntasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
+            print(_("nTasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
             return 1
         tags = load_tags_for(conn, args.task_id)
         depends = load_deps_for(conn, args.task_id)
@@ -656,26 +656,26 @@ def _parse_locks(raw: str | None) -> list[str]:
 def cmd_add(args: argparse.Namespace) -> int:
     if args.priority not in {"critical", "high", "normal", "low"}:
         print(
-            _("ntasker: invalid priority: {value!r}").format(value=args.priority),
+            _("nTasker: invalid priority: {value!r}").format(value=args.priority),
             file=sys.stderr,
         )
         return 2
     if args.phase is not None and args.phase not in {"planned", "wip", "review"}:
         print(
-            _("ntasker: invalid phase: {value!r}").format(value=args.phase),
+            _("nTasker: invalid phase: {value!r}").format(value=args.phase),
             file=sys.stderr,
         )
         return 2
     if args.agent is not None and args.agent not in agent_keys():
         print(
-            _("ntasker: invalid agent: {value!r}").format(value=args.agent),
+            _("nTasker: invalid agent: {value!r}").format(value=args.agent),
             file=sys.stderr,
         )
         return 2
     # Title is optional -- fall back to the start of the description.
     title_value = (args.title or "").strip() or title_from_description(args.description)
     if not title_value:
-        print(_("ntasker: need a --title or a --description"), file=sys.stderr)
+        print(_("nTasker: need a --title or a --description"), file=sys.stderr)
         return 2
     # phase column is NOT NULL since v2.0 -- default to ``planned`` when the
     # caller omits ``--phase`` so ``ntasker add --title X`` keeps working.
@@ -685,14 +685,14 @@ def cmd_add(args: argparse.Namespace) -> int:
         dep_ids = normalize_dep_ids(_parse_depends(args.depends) or [])
     except ValueError:
         print(
-            _("ntasker: invalid --depends value: {value!r}").format(value=args.depends),
+            _("nTasker: invalid --depends value: {value!r}").format(value=args.depends),
             file=sys.stderr,
         )
         return 2
     try:
         wt_arg = _parse_worktree(args.worktree)
     except ValueError:
-        print(_("ntasker: --worktree takes new, a worktree id or none"), file=sys.stderr)
+        print(_("nTasker: --worktree takes new, a worktree id or none"), file=sys.stderr)
         return 2
     with get_conn() as conn:
         # Check dependency targets exist *before* inserting, so a bad
@@ -701,7 +701,7 @@ def cmd_add(args: argparse.Namespace) -> int:
         for d in dep_ids:
             if conn.execute("SELECT 1 FROM tasks WHERE id = ?", (d,)).fetchone() is None:
                 print(
-                    _("ntasker: dependency task #{id} does not exist").format(id=d),
+                    _("nTasker: dependency task #{id} does not exist").format(id=d),
                     file=sys.stderr,
                 )
                 return 2
@@ -745,7 +745,7 @@ def cmd_in(args: argparse.Namespace) -> int:
     text = args.text if args.text not in (None, "-") else sys.stdin.read()
     text = (text or "").strip()
     if not text:
-        print(_("ntasker: nothing to store -- pass a note or pipe it in"), file=sys.stderr)
+        print(_("nTasker: nothing to store -- pass a note or pipe it in"), file=sys.stderr)
         return 2
     with get_conn() as conn:
         cur = conn.execute("INSERT INTO inbox (text, source) VALUES (?, 'cli')", (text,))
@@ -778,7 +778,7 @@ def cmd_project_summary(args: argparse.Namespace) -> int:
         try:
             summary = triage.summarize_project(name)
         except triage.TriageError as exc:
-            print(_("ntasker: summary failed: {err}").format(err=exc), file=sys.stderr)
+            print(_("nTasker: summary failed: {err}").format(err=exc), file=sys.stderr)
             return 1
     print(summary)
     return 0
@@ -795,7 +795,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         try:
             text = pathlib.Path(args.file).read_text(encoding="utf-8")
         except OSError as exc:
-            print(_("ntasker: cannot read {path}: {err}").format(path=args.file, err=exc), file=sys.stderr)
+            print(_("nTasker: cannot read {path}: {err}").format(path=args.file, err=exc), file=sys.stderr)
             return 2
     else:
         text = sys.stdin.read()
@@ -806,7 +806,7 @@ def cmd_report(args: argparse.Namespace) -> int:
             (fields["report"], fields["report_at"], args.task_id),
         )
         if cur.rowcount == 0:
-            print(_("ntasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
+            print(_("nTasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
             return 1
     if fields["report"]:
         print(_("#{id} report written").format(id=args.task_id))
@@ -827,13 +827,13 @@ def cmd_delete(args: argparse.Namespace) -> int:
             "SELECT title, archived FROM tasks WHERE id = ?", (args.task_id,)
         ).fetchone()
         if row is None:
-            print(_("ntasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
+            print(_("nTasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
             return 1
     title = row["title"]
     archived = bool(row["archived"])
 
     if not args.yes:
-        prompt = _("ntasker: delete #{id} {title!r} (archived={archived})? [y/N] ").format(
+        prompt = _("nTasker: delete #{id} {title!r} (archived={archived})? [y/N] ").format(
             id=args.task_id, title=title, archived=archived
         )
         try:
@@ -841,7 +841,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
         except EOFError:
             answer = ""
         if answer not in {"j", "ja", "y", "yes"}:
-            print(_("ntasker: aborted."))
+            print(_("nTasker: aborted."))
             return 1
 
     with get_conn() as conn:
@@ -849,7 +849,7 @@ def cmd_delete(args: argparse.Namespace) -> int:
         if cur.rowcount == 0:
             # Race: task disappeared between the existence check and the
             # delete. Treat as success-no-op rather than a hard error.
-            print(_("ntasker: task #{id} already gone").format(id=args.task_id))
+            print(_("nTasker: task #{id} already gone").format(id=args.task_id))
             return 0
     print(_("#{id} deleted").format(id=args.task_id))
     return 0
@@ -863,7 +863,7 @@ def cmd_done(args: argparse.Namespace) -> int:
             (now, args.task_id),
         )
         if cur.rowcount == 0:
-            print(_("ntasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
+            print(_("nTasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
             return 1
     print(_("#{id} -> done").format(id=args.task_id))
     return 0
@@ -885,7 +885,7 @@ def cmd_patch(args: argparse.Namespace) -> int:
             fields["phase"] = "planned"
         elif candidate not in {"planned", "wip", "review"}:
             print(
-                _("ntasker: invalid phase: {value!r}").format(value=args.phase),
+                _("nTasker: invalid phase: {value!r}").format(value=args.phase),
                 file=sys.stderr,
             )
             return 2
@@ -894,7 +894,7 @@ def cmd_patch(args: argparse.Namespace) -> int:
     if args.priority is not None:
         if args.priority not in {"critical", "high", "normal", "low"}:
             print(
-                _("ntasker: invalid priority: {value!r}").format(value=args.priority),
+                _("nTasker: invalid priority: {value!r}").format(value=args.priority),
                 file=sys.stderr,
             )
             return 2
@@ -904,7 +904,7 @@ def cmd_patch(args: argparse.Namespace) -> int:
         candidate = args.agent.strip()
         if candidate and candidate not in agent_keys():
             print(
-                _("ntasker: invalid agent: {value!r}").format(value=args.agent),
+                _("nTasker: invalid agent: {value!r}").format(value=args.agent),
                 file=sys.stderr,
             )
             return 2
@@ -926,7 +926,7 @@ def cmd_patch(args: argparse.Namespace) -> int:
     try:
         wt_arg = _parse_worktree(args.worktree)
     except ValueError:
-        print(_("ntasker: --worktree takes new, a worktree id or none"), file=sys.stderr)
+        print(_("nTasker: --worktree takes new, a worktree id or none"), file=sys.stderr)
         return 2
     if args.locks is not None:
         fields["locks"] = _parse_locks(args.locks)   # normalised below, once the project is known
@@ -935,7 +935,7 @@ def cmd_patch(args: argparse.Namespace) -> int:
     if args.status is not None:
         if args.status not in {"open", "done"}:
             print(
-                _("ntasker: invalid status: {value!r}").format(value=args.status),
+                _("nTasker: invalid status: {value!r}").format(value=args.status),
                 file=sys.stderr,
             )
             return 2
@@ -948,13 +948,13 @@ def cmd_patch(args: argparse.Namespace) -> int:
         dep_ids = _parse_depends(args.depends)
     except ValueError:
         print(
-            _("ntasker: invalid --depends value: {value!r}").format(value=args.depends),
+            _("nTasker: invalid --depends value: {value!r}").format(value=args.depends),
             file=sys.stderr,
         )
         return 2
 
     if not fields and dep_ids is None and wt_arg is None:
-        print(_("ntasker: nothing to change (specify at least one field)"), file=sys.stderr)
+        print(_("nTasker: nothing to change (specify at least one field)"), file=sys.stderr)
         return 2
 
     with get_conn() as conn:
@@ -962,7 +962,7 @@ def cmd_patch(args: argparse.Namespace) -> int:
             "SELECT project, worktree_id FROM tasks WHERE id = ?", (args.task_id,)
         ).fetchone()
         if exists is None:
-            print(_("ntasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
+            print(_("nTasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
             return 1
         own = fields["project"] if "project" in fields else exists["project"]
         if "locks" in fields:
@@ -974,7 +974,7 @@ def cmd_patch(args: argparse.Namespace) -> int:
             try:
                 worktrees.check_join(conn, own, exists["worktree_id"], join=False)
             except worktrees.WorktreeError as e:
-                print(f"ntasker: {e}", file=sys.stderr)
+                print(f"nTasker: {e}", file=sys.stderr)
                 return 2
 
         if dep_ids is not None:
@@ -983,11 +983,11 @@ def cmd_patch(args: argparse.Namespace) -> int:
                 validate_deps(conn, args.task_id, dep_ids)
             except DepError as e:
                 if e.reason == "self":
-                    msg = _("ntasker: a task cannot depend on itself")
+                    msg = _("nTasker: a task cannot depend on itself")
                 elif e.reason == "missing":
-                    msg = _("ntasker: dependency task #{id} does not exist").format(id=e.ref)
+                    msg = _("nTasker: dependency task #{id} does not exist").format(id=e.ref)
                 else:
-                    msg = _("ntasker: that dependency would create a cycle (via #{id})").format(
+                    msg = _("nTasker: that dependency would create a cycle (via #{id})").format(
                         id=e.ref
                     )
                 print(msg, file=sys.stderr)
@@ -1032,7 +1032,7 @@ def _attach_worktree(conn, task_id: int, project: str | None, wt: str | int) -> 
             worktrees.check_join(conn, project, int(wt), join=True)
             wt_id = int(wt)
     except worktrees.WorktreeError as e:
-        print(f"ntasker: {e}", file=sys.stderr)
+        print(f"nTasker: {e}", file=sys.stderr)
         return False
     conn.execute("UPDATE tasks SET worktree_id = ? WHERE id = ?", (wt_id, task_id))
     if wt == "new":
@@ -1043,12 +1043,12 @@ def _attach_worktree(conn, task_id: int, project: str | None, wt: str | int) -> 
 def cmd_tag_add(args: argparse.Namespace) -> int:
     norm = normalize_tags([args.tag])
     if not norm:
-        print(_("ntasker: empty tag name: {value!r}").format(value=args.tag), file=sys.stderr)
+        print(_("nTasker: empty tag name: {value!r}").format(value=args.tag), file=sys.stderr)
         return 2
     with get_conn() as conn:
         exists = conn.execute("SELECT 1 FROM tasks WHERE id = ?", (args.task_id,)).fetchone()
         if exists is None:
-            print(_("ntasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
+            print(_("nTasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
             return 1
         current = load_tags_for(conn, args.task_id)
         merged = list(dict.fromkeys([*current, *norm]))
@@ -1062,12 +1062,12 @@ def cmd_tag_rm(args: argparse.Namespace) -> int:
     with get_conn() as conn:
         exists = conn.execute("SELECT 1 FROM tasks WHERE id = ?", (args.task_id,)).fetchone()
         if exists is None:
-            print(_("ntasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
+            print(_("nTasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
             return 1
         current = load_tags_for(conn, args.task_id)
         if target not in current:
             print(
-                _("ntasker: tag {tag!r} not present on #{id}").format(
+                _("nTasker: tag {tag!r} not present on #{id}").format(
                     tag=target, id=args.task_id
                 ),
                 file=sys.stderr,
@@ -1119,7 +1119,7 @@ def cmd_config_list(args: argparse.Namespace) -> int:
 def cmd_config_get(args: argparse.Namespace) -> int:
     row = get_setting_raw(args.key)
     if row is None:
-        print(_("ntasker: setting {key!r} not set").format(key=args.key), file=sys.stderr)
+        print(_("nTasker: setting {key!r} not set").format(key=args.key), file=sys.stderr)
         return 1
     if args.json:
         _print_json(row)
@@ -1132,7 +1132,7 @@ def cmd_config_set(args: argparse.Namespace) -> int:
     try:
         row = set_setting(args.key, args.value)
     except ValueError as exc:
-        print(f"ntasker: {exc}", file=sys.stderr)
+        print(f"nTasker: {exc}", file=sys.stderr)
         return 2
     print(f"{row['key']} = {row['value']}")
     return 0
@@ -1140,7 +1140,7 @@ def cmd_config_set(args: argparse.Namespace) -> int:
 
 def cmd_config_unset(args: argparse.Namespace) -> int:
     if not delete_setting(args.key):
-        print(_("ntasker: setting {key!r} was not set").format(key=args.key), file=sys.stderr)
+        print(_("nTasker: setting {key!r} was not set").format(key=args.key), file=sys.stderr)
         return 1
     print(_("{key} removed").format(key=args.key))
     return 0
@@ -1160,7 +1160,7 @@ def _set_plugin_enabled(name: str, enabled: bool) -> int:
     ctx = plugins.REGISTRY.get(name)
     if ctx is None:
         print(
-            _("ntasker: unknown plugin {name!r}. Known: {known}").format(
+            _("nTasker: unknown plugin {name!r}. Known: {known}").format(
                 name=name, known=", ".join(plugins.REGISTRY)
             ),
             file=sys.stderr,
@@ -1174,15 +1174,15 @@ def _set_plugin_enabled(name: str, enabled: bool) -> int:
             from ntasker import service  # noqa: PLC0415
 
             cmd = service.resolve_install_command(ctx.spec.extra, missing)
-            print(_("ntasker: installing {pkgs} -- `{cmd}`").format(
+            print(_("nTasker: installing {pkgs} -- `{cmd}`").format(
                 pkgs=", ".join(missing), cmd=" ".join(cmd)
             ))
             rc = subprocess.run(cmd).returncode  # noqa: S603 -- auto-detected installer
             if rc != 0:
-                print(_("ntasker: install failed (exit {rc})").format(rc=rc), file=sys.stderr)
+                print(_("nTasker: install failed (exit {rc})").format(rc=rc), file=sys.stderr)
                 return rc
             if service.install_needs_restart():
-                print(_("ntasker: restart the service so the new packages take effect."))
+                print(_("nTasker: restart the service so the new packages take effect."))
     key = plugins.SETTING_DISABLED if ctx.spec.default_on else plugins.SETTING_ENABLED
     listed = enabled != ctx.spec.default_on
     row = get_setting_raw(key)
@@ -1193,7 +1193,7 @@ def _set_plugin_enabled(name: str, enabled: bool) -> int:
     try:
         set_setting(key, json.dumps(sorted(names)))
     except ValueError as exc:
-        print(f"ntasker: {exc}", file=sys.stderr)
+        print(f"nTasker: {exc}", file=sys.stderr)
         return 2
     state = _("enabled") if enabled else _("disabled")
     print(f"{name}: {state}")
@@ -1236,24 +1236,24 @@ def _reject_unqueueable(task_ids: list[int]) -> int | None:
                 "SELECT status, archived, draft, proposed FROM tasks WHERE id = ?", (tid,)
             ).fetchone()
             if row is None:
-                print(_("ntasker: task #{id} not found").format(id=tid), file=sys.stderr)
+                print(_("nTasker: task #{id} not found").format(id=tid), file=sys.stderr)
                 return 1
             if row["proposed"]:
                 print(
-                    _("ntasker: #{id} is an inbox proposal -- accept it first").format(id=tid),
+                    _("nTasker: #{id} is an inbox proposal -- accept it first").format(id=tid),
                     file=sys.stderr,
                 )
                 return 2
             if row["draft"]:
 
                 print(
-                    _("ntasker: #{id} is a draft -- drafts are never started").format(id=tid),
+                    _("nTasker: #{id} is a draft -- drafts are never started").format(id=tid),
                     file=sys.stderr,
                 )
                 return 2
             if row["archived"] or row["status"] != "open":
                 print(
-                    _("ntasker: #{id} is not open -- only open tasks can be queued").format(
+                    _("nTasker: #{id} is not open -- only open tasks can be queued").format(
                         id=tid
                     ),
                     file=sys.stderr,
@@ -1299,7 +1299,7 @@ def cmd_queue_rm(args: argparse.Namespace) -> int:
     missing = [i for i in args.task_id if i not in queued]
     if missing:
         print(
-            _("ntasker: not in the queue: {ids}").format(
+            _("nTasker: not in the queue: {ids}").format(
                 ids=", ".join(f"#{i}" for i in missing)
             ),
             file=sys.stderr,
@@ -1328,7 +1328,7 @@ def _warn_if_no_server(host: str, port: int) -> None:
         return
     print(
         _(
-            "ntasker: note -- no server answering on {host}:{port}. The queue only "
+            "nTasker: note -- no server answering on {host}:{port}. The queue only "
             "runs while `ntasker serve` is up."
         ).format(host=host, port=port),
         file=sys.stderr,
@@ -1363,10 +1363,10 @@ def cmd_queue_plan(args: argparse.Namespace) -> int:
             _server_base(args), "POST", "/api/queue/plan", {"ids": args.task_id}
         )
     except OSError as exc:
-        print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+        print(_("nTasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
         return 1
     if status >= 400:
-        print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
+        print(_("nTasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
         return 1
     print(_("queue planner started -- it plans the tasks and switches the queue on"))
     return 0
@@ -1408,21 +1408,21 @@ def cmd_run(args: argparse.Namespace) -> int:
         try:
             status, data = _api_call(base, "POST", "/api/queue/run", {"id": tid})
         except OSError as exc:
-            print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+            print(_("nTasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
             return 1
         if status >= 400:
-            print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
+            print(_("nTasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
             return 1
         paused = not data.get("enabled")
         if args.now and not paused:   # do not wait for the lane -- the panel's start-now button
             try:
                 status, data = _api_call(base, "POST", "/api/queue/start-now", {"id": tid})
             except OSError as exc:
-                print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+                print(_("nTasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
                 return 1
             if status >= 400:
                 print(
-                    _("ntasker: #{id} -- {detail}").format(id=tid, detail=data.get("detail", status)),
+                    _("nTasker: #{id} -- {detail}").format(id=tid, detail=data.get("detail", status)),
                     file=sys.stderr,
                 )
                 return 1
@@ -1441,7 +1441,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
     if paused:   # nothing starts at all until the queue is running again
         print(
-            _("ntasker: note -- the queue is paused; `ntasker queue start` runs it"),
+            _("nTasker: note -- the queue is paused; `ntasker queue start` runs it"),
             file=sys.stderr,
         )
     if args.open:
@@ -1510,10 +1510,10 @@ def _lock_request(args: argparse.Namespace, method: str, path: str, body: dict |
     try:
         status, data = _api_call(_server_base(args), method, path, body)
     except OSError as exc:
-        print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+        print(_("nTasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
         return 1
     if status >= 400:
-        print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
+        print(_("nTasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
         return 1
     if "waiting" in data:
         for w in data["waiting"]:
@@ -1554,10 +1554,10 @@ def _worktree_request(args: argparse.Namespace, method: str, path: str) -> tuple
     try:
         status, data = _api_call(_server_base(args), method, path, None, timeout=60.0)
     except OSError as exc:
-        print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+        print(_("nTasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
         return 1, {}
     if status >= 400:
-        print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
+        print(_("nTasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
         return 1, data
     return 0, data
 
@@ -1607,7 +1607,7 @@ def cmd_finish(args: argparse.Namespace) -> int:
         try:
             report = pathlib.Path(args.file).read_text(encoding="utf-8")
         except OSError as exc:
-            print(_("ntasker: cannot read {path}: {err}").format(path=args.file, err=exc), file=sys.stderr)
+            print(_("nTasker: cannot read {path}: {err}").format(path=args.file, err=exc), file=sys.stderr)
             return 2
     else:
         report = "" if sys.stdin.isatty() else sys.stdin.read()
@@ -1623,10 +1623,10 @@ def cmd_finish(args: argparse.Namespace) -> int:
     try:
         status, data = _api_call(_server_base(args), "POST", f"/api/tasks/{args.task_id}/outcome", body)
     except OSError as exc:
-        print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+        print(_("nTasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
         return 1
     if status >= 400:
-        print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
+        print(_("nTasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
         return 1
     print(_("#{id} finished: {status}").format(id=args.task_id, status=args.status))
     return 0
@@ -1642,13 +1642,13 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     :func:`cmd_finish`: the task must be visible to the running server.
     """
     if (args.task_id is None) == (not args.title):
-        print(_("ntasker: name a task id or pass --title, not both."), file=sys.stderr)
+        print(_("nTasker: name a task id or pass --title, not both."), file=sys.stderr)
         return 2
     session = (args.session or os.environ.get("CLAUDE_CODE_SESSION_ID") or "").strip()
     if not session:
         print(
             _(
-                "ntasker: no session id -- run this inside a Claude Code session, "
+                "nTasker: no session id -- run this inside a Claude Code session, "
                 "or pass --session <uuid>."
             ),
             file=sys.stderr,
@@ -1667,10 +1667,10 @@ def cmd_adopt(args: argparse.Namespace) -> int:
                 {"title": args.title, "project": project, "phase": "wip"},
             )
         except OSError as exc:
-            print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+            print(_("nTasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
             return 1
         if status >= 400:
-            print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
+            print(_("nTasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
             return 1
         task_id = data["id"]
     body: dict[str, Any] = {"session_id": session, "cwd": cwd}
@@ -1683,10 +1683,10 @@ def cmd_adopt(args: argparse.Namespace) -> int:
     try:
         status, data = _api_call(base, "POST", f"/api/claude/sessions/{task_id}/adopt", body)
     except OSError as exc:
-        print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+        print(_("nTasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
         return 1
     if status >= 400:
-        print(_("ntasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
+        print(_("nTasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
         return 1
     print(_("#{id} adopted this session -- resume it from the board.").format(id=task_id))
     return 0
@@ -1716,11 +1716,11 @@ def _message_request(args: argparse.Namespace, method: str, path: str, body: dic
     try:
         status, data = _api_call(_server_base(args), method, path, body)
     except OSError as exc:
-        print(_("ntasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
+        print(_("nTasker: server not reachable ({err})").format(err=exc), file=sys.stderr)
         return 1, {}
     if status >= 400:
         detail = data.get("detail", status) if isinstance(data, dict) else status
-        print(_("ntasker: {detail}").format(detail=detail), file=sys.stderr)
+        print(_("nTasker: {detail}").format(detail=detail), file=sys.stderr)
         return 1, data
     return 0, data
 
@@ -1768,7 +1768,7 @@ def cmd_inbox(args: argparse.Namespace) -> int:
     """Print and mark read the pending messages of the own task."""
     own = _own_task(args)
     if own is None:
-        print(_("ntasker: no task -- pass --task <id>."), file=sys.stderr)
+        print(_("nTasker: no task -- pass --task <id>."), file=sys.stderr)
         return 2
     rc, data = _message_request(args, "POST", f"/api/tasks/{own}/messages/take", None)
     if rc or args.json:
@@ -1783,7 +1783,7 @@ def cmd_wait_for(args: argparse.Namespace) -> int:
     """The own task waits for another: it becomes a dependency and is told so."""
     own = _own_task(args)
     if own is None:
-        print(_("ntasker: no task -- pass --task <id>."), file=sys.stderr)
+        print(_("nTasker: no task -- pass --task <id>."), file=sys.stderr)
         return 2
     body = {"on": args.task_id, "why": " ".join(args.why)}
     rc, _data = _message_request(args, "POST", f"/api/tasks/{own}/wait", body)
@@ -2097,7 +2097,7 @@ def _note_missing_permission_rule(spec) -> None:
         return
     print(
         _(
-            "ntasker: Claude Code still asks before every ntasker command. "
+            "nTasker: Claude Code still asks before every nTasker command. "
             "Run `ntasker config set claude_permissions on` to allow them."
         )
     )
@@ -2116,12 +2116,12 @@ def _do_agent_install(
     try:
         command_name = validate_command_name(command_name_raw)
     except ValueError as exc:
-        print(f"ntasker: {exc}", file=sys.stderr)
+        print(f"nTasker: {exc}", file=sys.stderr)
         return 2
     try:
         home = resolve_home(spec, home_override)
     except Exception as exc:  # noqa: BLE001
-        print(f"ntasker: invalid agent home: {exc}", file=sys.stderr)
+        print(f"nTasker: invalid agent home: {exc}", file=sys.stderr)
         return 2
 
     if check:
@@ -2130,17 +2130,17 @@ def _do_agent_install(
             marker = "MISSING" if not fs.installed else ("DRIFT" if fs.drift else "OK")
             print(f"  {marker:<8} {fs.label:<8} {fs.path}")
         if not status.installed:
-            print(_("ntasker: {agent} assets not installed.").format(agent=spec.label))
+            print(_("nTasker: {agent} assets not installed.").format(agent=spec.label))
             return 2
         if status.drift:
             print(
                 _(
-                    "ntasker: {agent} assets installed but out of date. "
+                    "nTasker: {agent} assets installed but out of date. "
                     "Run `ntasker agent install {key} --force` to update."
                 ).format(agent=spec.label, key=spec.key)
             )
             return 1
-        print(_("ntasker: {agent} assets up to date.").format(agent=spec.label))
+        print(_("nTasker: {agent} assets up to date.").format(agent=spec.label))
         return 0
 
     result = install_assets(
@@ -2165,16 +2165,16 @@ def _do_agent_install(
     if blocked:
         print(
             _(
-                "ntasker: aborted -- one or more files differ. "
+                "nTasker: aborted -- one or more files differ. "
                 "Pass --force to overwrite (with timestamped backup)."
             ),
             file=sys.stderr,
         )
         return 3
     if result.dry_run:
-        print(_("ntasker: would install to {path}").format(path=home))
+        print(_("nTasker: would install to {path}").format(path=home))
     else:
-        print(_("ntasker: installed to {path}").format(path=home))
+        print(_("nTasker: installed to {path}").format(path=home))
         _note_missing_permission_rule(spec)
     return 0
 
@@ -2189,14 +2189,14 @@ def cmd_agent_install(args: argparse.Namespace) -> int:
     key = args.agent
     if key not in AGENTS:
         print(
-            _("ntasker: unknown agent {key!r}. Known: {keys}").format(
+            _("nTasker: unknown agent {key!r}. Known: {keys}").format(
                 key=key, keys=", ".join(AGENTS)
             ),
             file=sys.stderr,
         )
         return 2
     if not plugins.is_enabled(key):
-        print(_("ntasker: plugin {name!r} is disabled.").format(name=key), file=sys.stderr)
+        print(_("nTasker: plugin {name!r} is disabled.").format(name=key), file=sys.stderr)
         return 2
     return _do_agent_install(
         AGENTS[key],
@@ -2284,7 +2284,7 @@ def cmd_assets_fetch(args: argparse.Namespace) -> int:
         import httpx  # noqa: PLC0415  -- lazy import on purpose
     except ImportError:
         print(
-            _("ntasker: httpx missing. Reinstall ntasker (httpx is a runtime dep)."),
+            _("nTasker: httpx missing. Reinstall nTasker (httpx is a runtime dep)."),
             file=sys.stderr,
         )
         return 2
@@ -2349,7 +2349,7 @@ def cmd_assets_fetch(args: argparse.Namespace) -> int:
     print(
         "\n"
         + _(
-            "ntasker: assets fetch -- {written} written, {skipped} skipped, "
+            "nTasker: assets fetch -- {written} written, {skipped} skipped, "
             "{failures} errors. Cache: {cache}"
         ).format(
             written=len(written),
@@ -2372,27 +2372,27 @@ def cmd_assets_remove(args: argparse.Namespace) -> int:
 
     root = assets_dir()
     if not root.exists():
-        print(_("ntasker: no asset cache at {path}.").format(path=root))
+        print(_("nTasker: no asset cache at {path}.").format(path=root))
         return 0
 
     if not args.yes:
         try:
             answer = (
-                input(_("ntasker: really delete cache {path}? [y/N] ").format(path=root))
+                input(_("nTasker: really delete cache {path}? [y/N] ").format(path=root))
                 .strip()
                 .lower()
             )
         except EOFError:
             answer = ""
         if answer not in {"j", "ja", "y", "yes"}:
-            print(_("ntasker: aborted."))
+            print(_("nTasker: aborted."))
             return 1
 
     # Whole-tree removal: we own the dir layout entirely (only files we
     # write live there) -- a recursive rmtree is correct and matches the
     # ``platformdirs`` user-data convention.
     shutil.rmtree(root)
-    print(_("ntasker: cache {path} removed.").format(path=root))
+    print(_("nTasker: cache {path} removed.").format(path=root))
     return 0
 
 
@@ -2435,7 +2435,7 @@ def cmd_assets_status(args: argparse.Namespace) -> int:
         )
         return 0
 
-    print(f"ntasker: assets_mode = {raw_mode or '(unset, default=auto)'} -> {resolved}")
+    print(f"nTasker: assets_mode = {raw_mode or '(unset, default=auto)'} -> {resolved}")
     print(f"         assets_dir  = {assets_dir()}")
     print(f"         complete    = {local_assets_complete()}")
     print()
@@ -2483,18 +2483,18 @@ def cmd_self_update(args: argparse.Namespace) -> int:
     source = None if update_command else service.local_install_source()
     if source and service.install_needs_restart():
         print(
-            _("ntasker: installed from {source} -- switching to the PyPI release.").format(
+            _("nTasker: installed from {source} -- switching to the PyPI release.").format(
                 source=source
             )
         )
     elif not update_command and not service.install_needs_restart():
         checkout = service.editable_source()
         if checkout:
-            print(_("ntasker: editable install -- reinstalling from {checkout}.").format(checkout=checkout))
-    print(_("ntasker: running `{cmd}`").format(cmd=" ".join(cmd)))
+            print(_("nTasker: editable install -- reinstalling from {checkout}.").format(checkout=checkout))
+    print(_("nTasker: running `{cmd}`").format(cmd=" ".join(cmd)))
     proc = subprocess.run(cmd)  # noqa: S603 -- user-configured / auto-detected
     if proc.returncode != 0:
-        print(_("ntasker: update command failed (exit {rc})").format(rc=proc.returncode))
+        print(_("nTasker: update command failed (exit {rc})").format(rc=proc.returncode))
         return proc.returncode
 
     # Report the now-installed version by asking the freshly upgraded CLI.
@@ -2503,11 +2503,11 @@ def cmd_self_update(args: argparse.Namespace) -> int:
         capture_output=True,
         text=True,
     ).stdout.strip()
-    print(_("ntasker: now at {ver} (was {old})").format(ver=ver or "?", old=f"ntasker {__version__}"))
+    print(_("nTasker: now at {ver} (was {old})").format(ver=ver or "?", old=f"nTasker {__version__}"))
 
     if not getattr(args, "no_restart", False):
         if service.restart_service():
-            print(_("ntasker: service restarted."))
+            print(_("nTasker: service restarted."))
     return 0
 
 
@@ -2523,10 +2523,10 @@ def cmd_service_install(args: argparse.Namespace) -> int:
     try:
         log = service.install(args.host, args.port, db_path, args.auto_update)
     except RuntimeError as exc:
-        print(f"ntasker: {exc}", file=sys.stderr)
+        print(f"nTasker: {exc}", file=sys.stderr)
         return 2
     for line in log:
-        print(f"ntasker: {line}")
+        print(f"nTasker: {line}")
     return 0
 
 
@@ -2537,10 +2537,10 @@ def cmd_service_uninstall(args: argparse.Namespace) -> int:
     try:
         log = service.uninstall()
     except RuntimeError as exc:
-        print(f"ntasker: {exc}", file=sys.stderr)
+        print(f"nTasker: {exc}", file=sys.stderr)
         return 2
     for line in log:
-        print(f"ntasker: {line}")
+        print(f"nTasker: {line}")
     return 0
 
 
@@ -2549,7 +2549,7 @@ def cmd_service_status(args: argparse.Namespace) -> int:
     from ntasker import service  # noqa: PLC0415
 
     for line in service.status():
-        print(f"ntasker: {line}")
+        print(f"nTasker: {line}")
     return 0
 
 
@@ -2558,10 +2558,10 @@ def cmd_service_start(args: argparse.Namespace) -> int:
     from ntasker import service  # noqa: PLC0415
 
     if service.start_service():
-        print(_("ntasker: service started."))
+        print(_("nTasker: service started."))
         return 0
     print(
-        _("ntasker: no service installed -- run `ntasker service install` first."),
+        _("nTasker: no service installed -- run `ntasker service install` first."),
         file=sys.stderr,
     )
     return 1
@@ -2572,10 +2572,10 @@ def cmd_service_stop(args: argparse.Namespace) -> int:
     from ntasker import service  # noqa: PLC0415
 
     if service.stop_service():
-        print(_("ntasker: service stopped."))
+        print(_("nTasker: service stopped."))
         return 0
     print(
-        _("ntasker: no service installed -- run `ntasker service install` first."),
+        _("nTasker: no service installed -- run `ntasker service install` first."),
         file=sys.stderr,
     )
     return 1
@@ -2595,7 +2595,7 @@ def cmd_service_restart(args: argparse.Namespace) -> int:
 
     if not service.service_installed():
         print(
-            _("ntasker: no service installed -- run `ntasker service install` first."),
+            _("nTasker: no service installed -- run `ntasker service install` first."),
             file=sys.stderr,
         )
         return 1
@@ -2606,7 +2606,7 @@ def cmd_service_restart(args: argparse.Namespace) -> int:
             ids = ", ".join(f"#{t}" for t in sorted(active))
             print(
                 _(
-                    "ntasker: restart deferred -- {n} task session(s) still running "
+                    "nTasker: restart deferred -- {n} task session(s) still running "
                     "({ids}); a restart would kill them. Retry later or pass --force."
                 ).format(n=len(active), ids=ids),
                 file=sys.stderr,
@@ -2614,7 +2614,7 @@ def cmd_service_restart(args: argparse.Namespace) -> int:
             return 2
 
     service.restart_service()
-    print(_("ntasker: service restarted."))
+    print(_("nTasker: service restarted."))
     return 0
 
 
@@ -2656,7 +2656,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="ntasker",
         description=_("Lightweight local task tracker. Single-user, FastAPI + SQLite."),
     )
-    p.add_argument("--version", action="version", version=f"ntasker {__version__}")
+    p.add_argument("--version", action="version", version=f"nTasker {__version__}")
     p.add_argument(
         "--db",
         metavar="PATH",
@@ -2688,7 +2688,7 @@ def build_parser() -> argparse.ArgumentParser:
     # stop ----------------------------------------------------------------
     sp_stop = sub.add_parser(
         "stop",
-        help=_("Ask a running ntasker server to shut down (POST /shutdown)."),
+        help=_("Ask a running nTasker server to shut down (POST /shutdown)."),
     )
     sp_stop.add_argument("--host", default="127.0.0.1")
     sp_stop.add_argument("--port", type=int, default=8766)
@@ -2697,7 +2697,7 @@ def build_parser() -> argparse.ArgumentParser:
     # restart --------------------------------------------------------------
     sp_restart = sub.add_parser(
         "restart",
-        help=_("Stop a running ntasker server, then start it again."),
+        help=_("Stop a running nTasker server, then start it again."),
     )
     # Defaults stay None on purpose: cmd_restart needs to tell "no address
     # given" (restart whatever serves ntasker, service manager included) from
@@ -3227,7 +3227,7 @@ def build_parser() -> argparse.ArgumentParser:
     # service -------------------------------------------------------------
     sp_svc = sub.add_parser(
         "service",
-        help=_("Install ntasker as an OS service (systemd / launchd)."),
+        help=_("Install nTasker as an OS service (systemd / launchd)."),
     )
     svc_sub = sp_svc.add_subparsers(dest="service_cmd", required=True)
 
@@ -3269,7 +3269,7 @@ def build_parser() -> argparse.ArgumentParser:
     # self-update ---------------------------------------------------------
     sp_su = sub.add_parser(
         "self-update",
-        help=_("Upgrade ntasker from PyPI, then restart the service."),
+        help=_("Upgrade nTasker from PyPI, then restart the service."),
     )
     sp_su.add_argument(
         "--no-restart",
@@ -3361,7 +3361,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         # init / serve / write -- ensure schema exists. Idempotent.
         if not db_path.exists():
-            print(_("ntasker: creating DB at {path}").format(path=db_path), file=sys.stderr)
+            print(_("nTasker: creating DB at {path}").format(path=db_path), file=sys.stderr)
         init_db()
 
     return args.func(args)

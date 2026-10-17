@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ntasker 1.3.0\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-17 17:49+0200\n"
+"POT-Creation-Date: 2026-10-17 18:01+0200\n"
 "PO-Revision-Date: 2026-05-02 09:19+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -177,9 +177,9 @@ msgid "Update installed -- restarting the server..."
 msgstr "Update installiert – Server wird neu gestartet …"
 
 #: src/ntasker/app.py:515
-msgid "Update installed -- restart ntasker to use the new version."
+msgid "Update installed -- restart nTasker to use the new version."
 msgstr ""
-"Update installiert – ntasker neu starten, um die neue Version zu "
+"Update installiert – nTasker neu starten, um die neue Version zu "
 "verwenden."
 
 #: src/ntasker/app.py:517
@@ -1666,11 +1666,11 @@ msgstr "KI-Agent-Integration"
 
 #: src/ntasker/app.py:925
 msgid ""
-"ntasker ships a skill (SKILL.md) and a /task <id> slash command for each "
+"nTasker ships a skill (SKILL.md) and a /task <id> slash command for each "
 "agent. This shows the install status per agent -- writes go exclusively "
 "through the CLI."
 msgstr ""
-"ntasker liefert für jeden Agenten ein Skill (SKILL.md) und einen /task "
+"nTasker liefert für jeden Agenten ein Skill (SKILL.md) und einen /task "
 "<id>-Slash-Befehl. Hier siehst du den Installationsstatus pro Agent -- "
 "Schreibzugriffe laufen ausschließlich über die CLI."
 
@@ -1959,10 +1959,10 @@ msgstr "Läuft"
 
 #: src/ntasker/app.py:1025
 msgid ""
-"ntasker only sees which sessions are running with \"Pick up terminal "
+"nTasker only sees which sessions are running with \"Pick up terminal "
 "sessions\" switched on."
 msgstr ""
-"ntasker sieht nur mit eingeschaltetem \"Terminal-Sessions übernehmen\", "
+"nTasker sieht nur mit eingeschaltetem \"Terminal-Sessions übernehmen\", "
 "welche Sessions laufen."
 
 #: src/ntasker/app.py:1028 src/ntasker/plugins/voice/__init__.py:62
@@ -2257,8 +2257,8 @@ msgstr ""
 "mit:"
 
 #: src/ntasker/app.py:1124
-msgid "ntasker is up to date."
-msgstr "ntasker ist aktuell."
+msgid "nTasker is up to date."
+msgstr "nTasker ist aktuell."
 
 #: src/ntasker/app.py:1125
 msgid "Could not reach PyPI to check for updates."
@@ -2550,124 +2550,124 @@ msgstr "fehlt"
 
 #: src/ntasker/cli.py:267
 #, python-brace-format
-msgid "ntasker: DB initialised at {path}"
-msgstr "ntasker: DB initialisiert bei {path}"
+msgid "nTasker: DB initialised at {path}"
+msgstr "nTasker: DB initialisiert bei {path}"
 
 #: src/ntasker/cli.py:415
-msgid "ntasker: --detach and --reload are mutually exclusive."
-msgstr "ntasker: --detach und --reload schließen sich gegenseitig aus."
+msgid "nTasker: --detach and --reload are mutually exclusive."
+msgstr "nTasker: --detach und --reload schließen sich gegenseitig aus."
 
 #: src/ntasker/cli.py:421
 #, python-brace-format
-msgid "ntasker: server already running on {host}:{port}"
-msgstr "ntasker: Server läuft bereits auf {host}:{port}"
+msgid "nTasker: server already running on {host}:{port}"
+msgstr "nTasker: Server läuft bereits auf {host}:{port}"
 
 #: src/ntasker/cli.py:433
 #, python-brace-format
-msgid "ntasker: started detached on {host}:{port} (pid {pid})"
-msgstr "ntasker: detached gestartet auf {host}:{port} (PID {pid})"
+msgid "nTasker: started detached on {host}:{port} (pid {pid})"
+msgstr "nTasker: detached gestartet auf {host}:{port} (PID {pid})"
 
 #: src/ntasker/cli.py:441
 #, python-brace-format
 msgid ""
-"ntasker: detached child (pid {pid}) did not answer /healthz within 3s on "
+"nTasker: detached child (pid {pid}) did not answer /healthz within 3s on "
 "{host}:{port}"
 msgstr ""
-"ntasker: detached Child (PID {pid}) antwortete nicht innerhalb von 3 s "
+"nTasker: detached Child (PID {pid}) antwortete nicht innerhalb von 3 s "
 "auf /healthz unter {host}:{port}"
 
 #: src/ntasker/cli.py:451
-msgid "ntasker: uvicorn not installed. `pip install ntasker[serve]`"
-msgstr "ntasker: uvicorn nicht installiert. `pip install ntasker[serve]`"
+msgid "nTasker: uvicorn not installed. `pip install ntasker[serve]`"
+msgstr "nTasker: uvicorn nicht installiert. `pip install ntasker[serve]`"
 
 #: src/ntasker/cli.py:504
 #, python-brace-format
 msgid ""
-"ntasker: something is listening on {host}:{port} but does not answer "
-"/healthz -- probably a pre-v1.4.0 ntasker or a foreign process. Kill it "
+"nTasker: something is listening on {host}:{port} but does not answer "
+"/healthz -- probably a pre-v1.4.0 nTasker or a foreign process. Kill it "
 "manually (POSIX: `pkill -f 'ntasker serve'`)."
 msgstr ""
-"ntasker: auf {host}:{port} lauscht etwas, antwortet aber nicht auf "
-"/healthz -- vermutlich ein ntasker älter als v1.4.0 oder ein fremder "
+"nTasker: auf {host}:{port} lauscht etwas, antwortet aber nicht auf "
+"/healthz -- vermutlich ein nTasker älter als v1.4.0 oder ein fremder "
 "Prozess. Bitte manuell beenden (POSIX: `pkill -f 'ntasker serve'`)."
 
 #: src/ntasker/cli.py:512
 #, python-brace-format
-msgid "ntasker: no server running on {host}:{port}"
-msgstr "ntasker: kein Server läuft auf {host}:{port}"
+msgid "nTasker: no server running on {host}:{port}"
+msgstr "nTasker: kein Server läuft auf {host}:{port}"
 
 #: src/ntasker/cli.py:528
 #, python-brace-format
-msgid "ntasker: shutdown request failed: {exc}"
-msgstr "ntasker: Shutdown-Anfrage fehlgeschlagen: {exc}"
+msgid "nTasker: shutdown request failed: {exc}"
+msgstr "nTasker: Shutdown-Anfrage fehlgeschlagen: {exc}"
 
 #: src/ntasker/cli.py:539
 #, python-brace-format
-msgid "ntasker: server on {host}:{port} stopped."
-msgstr "ntasker: Server auf {host}:{port} gestoppt."
+msgid "nTasker: server on {host}:{port} stopped."
+msgstr "nTasker: Server auf {host}:{port} gestoppt."
 
 #: src/ntasker/cli.py:547
 #, python-brace-format
-msgid "ntasker: server on {host}:{port} still answering after 3s -- giving up."
-msgstr "ntasker: Server auf {host}:{port} antwortet weiterhin nach 3 s -- Abbruch."
+msgid "nTasker: server on {host}:{port} still answering after 3s -- giving up."
+msgstr "nTasker: Server auf {host}:{port} antwortet weiterhin nach 3 s -- Abbruch."
 
 #: src/ntasker/cli.py:592
-msgid "ntasker: could not restart the installed service."
-msgstr "ntasker: Der installierte Service konnte nicht neu gestartet werden."
+msgid "nTasker: could not restart the installed service."
+msgstr "nTasker: Der installierte Service konnte nicht neu gestartet werden."
 
 #: src/ntasker/cli.py:600
 #, python-brace-format
-msgid "ntasker: service restarted on {host}:{port}"
-msgstr "ntasker: Service auf {host}:{port} neu gestartet"
+msgid "nTasker: service restarted on {host}:{port}"
+msgstr "nTasker: Service auf {host}:{port} neu gestartet"
 
 #: src/ntasker/cli.py:608
 #, python-brace-format
 msgid ""
-"ntasker: the service was restarted but nothing answers on {host}:{port}. "
+"nTasker: the service was restarted but nothing answers on {host}:{port}. "
 "Check `ntasker service status`."
 msgstr ""
-"ntasker: Der Service wurde neu gestartet, aber auf {host}:{port} "
+"nTasker: Der Service wurde neu gestartet, aber auf {host}:{port} "
 "antwortet nichts. Prüfe `ntasker service status`."
 
 #: src/ntasker/cli.py:638 src/ntasker/cli.py:809 src/ntasker/cli.py:830
 #: src/ntasker/cli.py:866 src/ntasker/cli.py:965 src/ntasker/cli.py:1051
 #: src/ntasker/cli.py:1065 src/ntasker/cli.py:1239
 #, python-brace-format
-msgid "ntasker: task #{id} not found"
-msgstr "ntasker: Task #{id} nicht gefunden"
+msgid "nTasker: task #{id} not found"
+msgstr "nTasker: Task #{id} nicht gefunden"
 
 #: src/ntasker/cli.py:659 src/ntasker/cli.py:897
 #, python-brace-format
-msgid "ntasker: invalid priority: {value!r}"
-msgstr "ntasker: ungültige Priorität: {value!r}"
+msgid "nTasker: invalid priority: {value!r}"
+msgstr "nTasker: ungültige Priorität: {value!r}"
 
 #: src/ntasker/cli.py:665 src/ntasker/cli.py:888
 #, python-brace-format
-msgid "ntasker: invalid phase: {value!r}"
-msgstr "ntasker: ungültige Phase: {value!r}"
+msgid "nTasker: invalid phase: {value!r}"
+msgstr "nTasker: ungültige Phase: {value!r}"
 
 #: src/ntasker/cli.py:671 src/ntasker/cli.py:907
 #, python-brace-format
-msgid "ntasker: invalid agent: {value!r}"
-msgstr "ntasker: ungültiger Agent: {value!r}"
+msgid "nTasker: invalid agent: {value!r}"
+msgstr "nTasker: ungültiger Agent: {value!r}"
 
 #: src/ntasker/cli.py:678
-msgid "ntasker: need a --title or a --description"
-msgstr "ntasker: benötige --title oder --description"
+msgid "nTasker: need a --title or a --description"
+msgstr "nTasker: benötige --title oder --description"
 
 #: src/ntasker/cli.py:688 src/ntasker/cli.py:951
 #, python-brace-format
-msgid "ntasker: invalid --depends value: {value!r}"
-msgstr "ntasker: ungültiger --depends-Wert: {value!r}"
+msgid "nTasker: invalid --depends value: {value!r}"
+msgstr "nTasker: ungültiger --depends-Wert: {value!r}"
 
 #: src/ntasker/cli.py:695 src/ntasker/cli.py:929
-msgid "ntasker: --worktree takes new, a worktree id or none"
-msgstr "ntasker: --worktree erwartet new, eine Worktree-ID oder none"
+msgid "nTasker: --worktree takes new, a worktree id or none"
+msgstr "nTasker: --worktree erwartet new, eine Worktree-ID oder none"
 
 #: src/ntasker/cli.py:704 src/ntasker/cli.py:988
 #, python-brace-format
-msgid "ntasker: dependency task #{id} does not exist"
-msgstr "ntasker: Abhängigkeit Task #{id} existiert nicht"
+msgid "nTasker: dependency task #{id} does not exist"
+msgstr "nTasker: Abhängigkeit Task #{id} existiert nicht"
 
 #: src/ntasker/cli.py:735
 #, python-brace-format
@@ -2675,8 +2675,8 @@ msgid "#{id} created: {title}"
 msgstr "#{id} angelegt: {title}"
 
 #: src/ntasker/cli.py:748
-msgid "ntasker: nothing to store -- pass a note or pipe it in"
-msgstr "ntasker: nichts zu speichern -- Notiz übergeben oder einleiten"
+msgid "nTasker: nothing to store -- pass a note or pipe it in"
+msgstr "nTasker: nichts zu speichern -- Notiz übergeben oder einleiten"
 
 #: src/ntasker/cli.py:752
 #, python-brace-format
@@ -2693,13 +2693,13 @@ msgstr "Zusammenfassung gespeichert"
 
 #: src/ntasker/cli.py:781
 #, python-brace-format
-msgid "ntasker: summary failed: {err}"
-msgstr "ntasker: Zusammenfassung fehlgeschlagen: {err}"
+msgid "nTasker: summary failed: {err}"
+msgstr "nTasker: Zusammenfassung fehlgeschlagen: {err}"
 
 #: src/ntasker/cli.py:798 src/ntasker/cli.py:1610
 #, python-brace-format
-msgid "ntasker: cannot read {path}: {err}"
-msgstr "ntasker: {path} nicht lesbar: {err}"
+msgid "nTasker: cannot read {path}: {err}"
+msgstr "nTasker: {path} nicht lesbar: {err}"
 
 #: src/ntasker/cli.py:812
 #, python-brace-format
@@ -2713,19 +2713,19 @@ msgstr "#{id} Bericht gelöscht"
 
 #: src/ntasker/cli.py:836
 #, python-brace-format
-msgid "ntasker: delete #{id} {title!r} (archived={archived})? [y/N] "
+msgid "nTasker: delete #{id} {title!r} (archived={archived})? [y/N] "
 msgstr ""
-"ntasker: Task #{id} {title!r} (archiviert={archived}) wirklich löschen? "
+"nTasker: Task #{id} {title!r} (archiviert={archived}) wirklich löschen? "
 "[j/N] "
 
 #: src/ntasker/cli.py:844 src/ntasker/cli.py:2388
-msgid "ntasker: aborted."
-msgstr "ntasker: abgebrochen."
+msgid "nTasker: aborted."
+msgstr "nTasker: abgebrochen."
 
 #: src/ntasker/cli.py:852
 #, python-brace-format
-msgid "ntasker: task #{id} already gone"
-msgstr "ntasker: Task #{id} bereits weg"
+msgid "nTasker: task #{id} already gone"
+msgstr "nTasker: Task #{id} bereits weg"
 
 #: src/ntasker/cli.py:854
 #, python-brace-format
@@ -2739,21 +2739,21 @@ msgstr "#{id} -> erledigt"
 
 #: src/ntasker/cli.py:938
 #, python-brace-format
-msgid "ntasker: invalid status: {value!r}"
-msgstr "ntasker: ungültiger Status: {value!r}"
+msgid "nTasker: invalid status: {value!r}"
+msgstr "nTasker: ungültiger Status: {value!r}"
 
 #: src/ntasker/cli.py:957
-msgid "ntasker: nothing to change (specify at least one field)"
-msgstr "ntasker: nichts zu ändern (mindestens ein Feld angeben)"
+msgid "nTasker: nothing to change (specify at least one field)"
+msgstr "nTasker: nichts zu ändern (mindestens ein Feld angeben)"
 
 #: src/ntasker/cli.py:986
-msgid "ntasker: a task cannot depend on itself"
-msgstr "ntasker: eine Aufgabe kann nicht von sich selbst abhängen"
+msgid "nTasker: a task cannot depend on itself"
+msgstr "nTasker: eine Aufgabe kann nicht von sich selbst abhängen"
 
 #: src/ntasker/cli.py:990
 #, python-brace-format
-msgid "ntasker: that dependency would create a cycle (via #{id})"
-msgstr "ntasker: diese Abhängigkeit würde einen Zyklus erzeugen (über #{id})"
+msgid "nTasker: that dependency would create a cycle (via #{id})"
+msgstr "nTasker: diese Abhängigkeit würde einen Zyklus erzeugen (über #{id})"
 
 #: src/ntasker/cli.py:1007
 #, python-brace-format
@@ -2767,8 +2767,8 @@ msgstr "Worktree {branch} angelegt"
 
 #: src/ntasker/cli.py:1046
 #, python-brace-format
-msgid "ntasker: empty tag name: {value!r}"
-msgstr "ntasker: leerer Tag-Name: {value!r}"
+msgid "nTasker: empty tag name: {value!r}"
+msgstr "nTasker: leerer Tag-Name: {value!r}"
 
 #: src/ntasker/cli.py:1056
 #, python-brace-format
@@ -2777,8 +2777,8 @@ msgstr "#{id} Tag +{tag}"
 
 #: src/ntasker/cli.py:1070
 #, python-brace-format
-msgid "ntasker: tag {tag!r} not present on #{id}"
-msgstr "ntasker: Tag {tag!r} nicht vorhanden auf #{id}"
+msgid "nTasker: tag {tag!r} not present on #{id}"
+msgstr "nTasker: Tag {tag!r} nicht vorhanden auf #{id}"
 
 #: src/ntasker/cli.py:1078
 #, python-brace-format
@@ -2791,13 +2791,13 @@ msgstr "(keine Settings gesetzt)"
 
 #: src/ntasker/cli.py:1122
 #, python-brace-format
-msgid "ntasker: setting {key!r} not set"
-msgstr "ntasker: Setting {key!r} nicht gesetzt"
+msgid "nTasker: setting {key!r} not set"
+msgstr "nTasker: Setting {key!r} nicht gesetzt"
 
 #: src/ntasker/cli.py:1143
 #, python-brace-format
-msgid "ntasker: setting {key!r} was not set"
-msgstr "ntasker: Setting {key!r} war nicht gesetzt"
+msgid "nTasker: setting {key!r} was not set"
+msgstr "nTasker: Setting {key!r} war nicht gesetzt"
 
 #: src/ntasker/cli.py:1145
 #, python-brace-format
@@ -2806,22 +2806,22 @@ msgstr "{key} entfernt"
 
 #: src/ntasker/cli.py:1163
 #, python-brace-format
-msgid "ntasker: unknown plugin {name!r}. Known: {known}"
-msgstr "ntasker: unbekanntes Plugin {name!r}. Bekannt: {known}"
+msgid "nTasker: unknown plugin {name!r}. Known: {known}"
+msgstr "nTasker: unbekanntes Plugin {name!r}. Bekannt: {known}"
 
 #: src/ntasker/cli.py:1177
 #, python-brace-format
-msgid "ntasker: installing {pkgs} -- `{cmd}`"
-msgstr "ntasker: installiere {pkgs} -- `{cmd}`"
+msgid "nTasker: installing {pkgs} -- `{cmd}`"
+msgstr "nTasker: installiere {pkgs} -- `{cmd}`"
 
 #: src/ntasker/cli.py:1182
 #, python-brace-format
-msgid "ntasker: install failed (exit {rc})"
-msgstr "ntasker: Installation fehlgeschlagen (Exit {rc})"
+msgid "nTasker: install failed (exit {rc})"
+msgstr "nTasker: Installation fehlgeschlagen (Exit {rc})"
 
 #: src/ntasker/cli.py:1185
-msgid "ntasker: restart the service so the new packages take effect."
-msgstr "ntasker: Service neu starten, damit die neuen Pakete wirksam werden."
+msgid "nTasker: restart the service so the new packages take effect."
+msgstr "nTasker: Service neu starten, damit die neuen Pakete wirksam werden."
 
 #: src/ntasker/cli.py:1198
 msgid "enabled"
@@ -2833,18 +2833,18 @@ msgstr "deaktiviert"
 
 #: src/ntasker/cli.py:1243
 #, python-brace-format
-msgid "ntasker: #{id} is an inbox proposal -- accept it first"
-msgstr "ntasker: #{id} ist ein Inbox-Vorschlag -- erst annehmen"
+msgid "nTasker: #{id} is an inbox proposal -- accept it first"
+msgstr "nTasker: #{id} ist ein Inbox-Vorschlag -- erst annehmen"
 
 #: src/ntasker/cli.py:1250
 #, python-brace-format
-msgid "ntasker: #{id} is a draft -- drafts are never started"
-msgstr "ntasker: #{id} ist ein Entwurf -- Entwürfe werden nie gestartet"
+msgid "nTasker: #{id} is a draft -- drafts are never started"
+msgstr "nTasker: #{id} ist ein Entwurf -- Entwürfe werden nie gestartet"
 
 #: src/ntasker/cli.py:1256
 #, python-brace-format
-msgid "ntasker: #{id} is not open -- only open tasks can be queued"
-msgstr "ntasker: #{id} ist nicht offen -- nur offene Aufgaben können in die Queue"
+msgid "nTasker: #{id} is not open -- only open tasks can be queued"
+msgstr "nTasker: #{id} ist nicht offen -- nur offene Aufgaben können in die Queue"
 
 #: src/ntasker/cli.py:1273
 msgid "Queue: running"
@@ -2865,8 +2865,8 @@ msgstr "in die Queue gestellt: {ids}"
 
 #: src/ntasker/cli.py:1302
 #, python-brace-format
-msgid "ntasker: not in the queue: {ids}"
-msgstr "ntasker: nicht in der Queue: {ids}"
+msgid "nTasker: not in the queue: {ids}"
+msgstr "nTasker: nicht in der Queue: {ids}"
 
 #: src/ntasker/cli.py:1309
 #, python-brace-format
@@ -2881,10 +2881,10 @@ msgstr "Queue geleert -- {n} Aufgabe(n) entfernt"
 #: src/ntasker/cli.py:1331
 #, python-brace-format
 msgid ""
-"ntasker: note -- no server answering on {host}:{port}. The queue only "
+"nTasker: note -- no server answering on {host}:{port}. The queue only "
 "runs while `ntasker serve` is up."
 msgstr ""
-"ntasker: Hinweis -- kein Server antwortet auf {host}:{port}. Die Queue "
+"nTasker: Hinweis -- kein Server antwortet auf {host}:{port}. Die Queue "
 "läuft nur, solange `ntasker serve` läuft."
 
 #: src/ntasker/cli.py:1341
@@ -2900,15 +2900,15 @@ msgstr "Queue pausiert"
 #: src/ntasker/cli.py:1513 src/ntasker/cli.py:1557 src/ntasker/cli.py:1626
 #: src/ntasker/cli.py:1670 src/ntasker/cli.py:1686 src/ntasker/cli.py:1719
 #, python-brace-format
-msgid "ntasker: server not reachable ({err})"
-msgstr "ntasker: Server nicht erreichbar ({err})"
+msgid "nTasker: server not reachable ({err})"
+msgstr "nTasker: Server nicht erreichbar ({err})"
 
 #: src/ntasker/cli.py:1369 src/ntasker/cli.py:1414 src/ntasker/cli.py:1516
 #: src/ntasker/cli.py:1560 src/ntasker/cli.py:1629 src/ntasker/cli.py:1673
 #: src/ntasker/cli.py:1689 src/ntasker/cli.py:1723
 #, python-brace-format
-msgid "ntasker: {detail}"
-msgstr "ntasker: {detail}"
+msgid "nTasker: {detail}"
+msgstr "nTasker: {detail}"
 
 #: src/ntasker/cli.py:1371
 msgid "queue planner started -- it plans the tasks and switches the queue on"
@@ -2916,8 +2916,8 @@ msgstr "Queue-Planer gestartet -- er plant die Tasks und schaltet die Queue ein"
 
 #: src/ntasker/cli.py:1425
 #, python-brace-format
-msgid "ntasker: #{id} -- {detail}"
-msgstr "ntasker: #{id} -- {detail}"
+msgid "nTasker: #{id} -- {detail}"
+msgstr "nTasker: #{id} -- {detail}"
 
 #: src/ntasker/cli.py:1430
 #, python-brace-format
@@ -2930,9 +2930,9 @@ msgid "#{id} queued -- {pos}. in its lane; watch it at {url}"
 msgstr "#{id} in die Queue gestellt -- {pos}. in seiner Spur; zusehen unter {url}"
 
 #: src/ntasker/cli.py:1444
-msgid "ntasker: note -- the queue is paused; `ntasker queue start` runs it"
+msgid "nTasker: note -- the queue is paused; `ntasker queue start` runs it"
 msgstr ""
-"ntasker: Hinweis -- die Queue ist pausiert; `ntasker queue start` startet"
+"nTasker: Hinweis -- die Queue ist pausiert; `ntasker queue start` startet"
 " sie"
 
 #: src/ntasker/cli.py:1504
@@ -2977,15 +2977,15 @@ msgid "#{id} finished: {status}"
 msgstr "#{id} abgeschlossen: {status}"
 
 #: src/ntasker/cli.py:1645
-msgid "ntasker: name a task id or pass --title, not both."
-msgstr "ntasker: gib eine Aufgaben-ID oder --title an, nicht beides."
+msgid "nTasker: name a task id or pass --title, not both."
+msgstr "nTasker: gib eine Aufgaben-ID oder --title an, nicht beides."
 
 #: src/ntasker/cli.py:1651
 msgid ""
-"ntasker: no session id -- run this inside a Claude Code session, or pass "
+"nTasker: no session id -- run this inside a Claude Code session, or pass "
 "--session <uuid>."
 msgstr ""
-"ntasker: keine Session-ID – führe das in einer Claude-Code-Session aus "
+"nTasker: keine Session-ID – führe das in einer Claude-Code-Session aus "
 "oder gib --session <uuid> an."
 
 #: src/ntasker/cli.py:1691
@@ -3024,8 +3024,8 @@ msgstr ""
 "nächste."
 
 #: src/ntasker/cli.py:1771 src/ntasker/cli.py:1786
-msgid "ntasker: no task -- pass --task <id>."
-msgstr "ntasker: keine Aufgabe -- gib --task <id> an."
+msgid "nTasker: no task -- pass --task <id>."
+msgstr "nTasker: keine Aufgabe -- gib --task <id> an."
 
 #: src/ntasker/cli.py:1778
 msgid "(no new messages)"
@@ -3059,62 +3059,62 @@ msgstr "{n} Projektname(n) migriert."
 
 #: src/ntasker/cli.py:2100
 msgid ""
-"ntasker: Claude Code still asks before every ntasker command. Run "
+"nTasker: Claude Code still asks before every nTasker command. Run "
 "`ntasker config set claude_permissions on` to allow them."
 msgstr ""
-"ntasker: Claude Code fragt weiterhin vor jedem ntasker-Kommando nach. "
+"nTasker: Claude Code fragt weiterhin vor jedem ntasker-Kommando nach. "
 "`ntasker config set claude_permissions on` erlaubt sie."
 
 #: src/ntasker/cli.py:2133
 #, python-brace-format
-msgid "ntasker: {agent} assets not installed."
-msgstr "ntasker: {agent}-Assets nicht installiert."
+msgid "nTasker: {agent} assets not installed."
+msgstr "nTasker: {agent}-Assets nicht installiert."
 
 #: src/ntasker/cli.py:2138
 #, python-brace-format
 msgid ""
-"ntasker: {agent} assets installed but out of date. Run `ntasker agent "
+"nTasker: {agent} assets installed but out of date. Run `ntasker agent "
 "install {key} --force` to update."
 msgstr ""
-"ntasker: {agent}-Assets installiert, aber veraltet. Update mit `ntasker "
+"nTasker: {agent}-Assets installiert, aber veraltet. Update mit `ntasker "
 "agent install {key} --force`."
 
 #: src/ntasker/cli.py:2143
 #, python-brace-format
-msgid "ntasker: {agent} assets up to date."
-msgstr "ntasker: {agent}-Assets sind aktuell."
+msgid "nTasker: {agent} assets up to date."
+msgstr "nTasker: {agent}-Assets sind aktuell."
 
 #: src/ntasker/cli.py:2168
 msgid ""
-"ntasker: aborted -- one or more files differ. Pass --force to overwrite "
+"nTasker: aborted -- one or more files differ. Pass --force to overwrite "
 "(with timestamped backup)."
 msgstr ""
-"ntasker: abgebrochen -- eine oder mehrere Dateien weichen ab. --force "
+"nTasker: abgebrochen -- eine oder mehrere Dateien weichen ab. --force "
 "erzwingt Überschreiben (mit Zeitstempel-Backup)."
 
 #: src/ntasker/cli.py:2175
 #, python-brace-format
-msgid "ntasker: would install to {path}"
-msgstr "ntasker: würde nach {path} installieren"
+msgid "nTasker: would install to {path}"
+msgstr "nTasker: würde nach {path} installieren"
 
 #: src/ntasker/cli.py:2177
 #, python-brace-format
-msgid "ntasker: installed to {path}"
-msgstr "ntasker: nach {path} installiert"
+msgid "nTasker: installed to {path}"
+msgstr "nTasker: nach {path} installiert"
 
 #: src/ntasker/cli.py:2192
 #, python-brace-format
-msgid "ntasker: unknown agent {key!r}. Known: {keys}"
-msgstr "ntasker: unbekannter Agent {key!r}. Bekannt: {keys}"
+msgid "nTasker: unknown agent {key!r}. Known: {keys}"
+msgstr "nTasker: unbekannter Agent {key!r}. Bekannt: {keys}"
 
 #: src/ntasker/cli.py:2199
 #, python-brace-format
-msgid "ntasker: plugin {name!r} is disabled."
-msgstr "ntasker: Plugin {name!r} ist deaktiviert."
+msgid "nTasker: plugin {name!r} is disabled."
+msgstr "nTasker: Plugin {name!r} ist deaktiviert."
 
 #: src/ntasker/cli.py:2287
-msgid "ntasker: httpx missing. Reinstall ntasker (httpx is a runtime dep)."
-msgstr "ntasker: httpx fehlt. Installiere ntasker neu (httpx ist Runtime-Dep)."
+msgid "nTasker: httpx missing. Reinstall nTasker (httpx is a runtime dep)."
+msgstr "nTasker: httpx fehlt. Installiere nTasker neu (httpx ist Runtime-Dep)."
 
 #: src/ntasker/cli.py:2320
 #, python-brace-format
@@ -3129,77 +3129,77 @@ msgstr "  HASH   {name:<22} SRI-Mismatch -- Datei verworfen!"
 #: src/ntasker/cli.py:2352
 #, python-brace-format
 msgid ""
-"ntasker: assets fetch -- {written} written, {skipped} skipped, {failures}"
+"nTasker: assets fetch -- {written} written, {skipped} skipped, {failures}"
 " errors. Cache: {cache}"
 msgstr ""
-"ntasker: assets fetch -- {written} geschrieben, {skipped} übersprungen, "
+"nTasker: assets fetch -- {written} geschrieben, {skipped} übersprungen, "
 "{failures} Fehler. Cache: {cache}"
 
 #: src/ntasker/cli.py:2375
 #, python-brace-format
-msgid "ntasker: no asset cache at {path}."
-msgstr "ntasker: kein Asset-Cache vorhanden bei {path}."
+msgid "nTasker: no asset cache at {path}."
+msgstr "nTasker: kein Asset-Cache vorhanden bei {path}."
 
 #: src/ntasker/cli.py:2381
 #, python-brace-format
-msgid "ntasker: really delete cache {path}? [y/N] "
-msgstr "ntasker: Cache {path} wirklich löschen? [j/N] "
+msgid "nTasker: really delete cache {path}? [y/N] "
+msgstr "nTasker: Cache {path} wirklich löschen? [j/N] "
 
 #: src/ntasker/cli.py:2395
 #, python-brace-format
-msgid "ntasker: cache {path} removed."
-msgstr "ntasker: Cache {path} entfernt."
+msgid "nTasker: cache {path} removed."
+msgstr "nTasker: Cache {path} entfernt."
 
 #: src/ntasker/cli.py:2486
 #, python-brace-format
-msgid "ntasker: installed from {source} -- switching to the PyPI release."
-msgstr "ntasker: installiert aus {source} -- wechsle zum PyPI-Release."
+msgid "nTasker: installed from {source} -- switching to the PyPI release."
+msgstr "nTasker: installiert aus {source} -- wechsle zum PyPI-Release."
 
 #: src/ntasker/cli.py:2493
 #, python-brace-format
-msgid "ntasker: editable install -- reinstalling from {checkout}."
-msgstr "ntasker: editable Installation -- installiere neu aus {checkout}."
+msgid "nTasker: editable install -- reinstalling from {checkout}."
+msgstr "nTasker: editable Installation -- installiere neu aus {checkout}."
 
 #: src/ntasker/cli.py:2494
 #, python-brace-format
-msgid "ntasker: running `{cmd}`"
-msgstr "ntasker: führe `{cmd}` aus"
+msgid "nTasker: running `{cmd}`"
+msgstr "nTasker: führe `{cmd}` aus"
 
 #: src/ntasker/cli.py:2497
 #, python-brace-format
-msgid "ntasker: update command failed (exit {rc})"
-msgstr "ntasker: Update-Befehl fehlgeschlagen (Exit {rc})"
+msgid "nTasker: update command failed (exit {rc})"
+msgstr "nTasker: Update-Befehl fehlgeschlagen (Exit {rc})"
 
 #: src/ntasker/cli.py:2506
 #, python-brace-format
-msgid "ntasker: now at {ver} (was {old})"
-msgstr "ntasker: jetzt {ver} (vorher {old})"
+msgid "nTasker: now at {ver} (was {old})"
+msgstr "nTasker: jetzt {ver} (vorher {old})"
 
 #: src/ntasker/cli.py:2510 src/ntasker/cli.py:2617
-msgid "ntasker: service restarted."
-msgstr "ntasker: Dienst neu gestartet."
+msgid "nTasker: service restarted."
+msgstr "nTasker: Dienst neu gestartet."
 
 #: src/ntasker/cli.py:2561
-msgid "ntasker: service started."
-msgstr "ntasker: Dienst gestartet."
+msgid "nTasker: service started."
+msgstr "nTasker: Dienst gestartet."
 
 #: src/ntasker/cli.py:2564 src/ntasker/cli.py:2578 src/ntasker/cli.py:2598
-msgid "ntasker: no service installed -- run `ntasker service install` first."
+msgid "nTasker: no service installed -- run `ntasker service install` first."
 msgstr ""
-"ntasker: Kein Dienst installiert -- zuerst `ntasker service install` "
+"nTasker: Kein Dienst installiert -- zuerst `ntasker service install` "
 "ausführen."
 
 #: src/ntasker/cli.py:2575
-msgid "ntasker: service stopped."
-msgstr "ntasker: Dienst gestoppt."
+msgid "nTasker: service stopped."
+msgstr "nTasker: Dienst gestoppt."
 
 #: src/ntasker/cli.py:2609
 #, python-brace-format
 msgid ""
-"ntasker: restart deferred -- {n} task session(s) still running ({ids}); a"
+"nTasker: restart deferred -- {n} task session(s) still running ({ids}); a"
 " restart would kill them. Retry later or pass --force."
 msgstr ""
-"ntasker: Neustart aufgeschoben -- {n} Task-Sitzung(en) laufen noch "
+"nTasker: Neustart aufgeschoben -- {n} Task-Sitzung(en) laufen noch "
 "({ids}); ein Neustart würde sie beenden. Später erneut versuchen oder "
 "--force angeben."
 
@@ -3239,12 +3239,12 @@ msgid "Run the FastAPI server"
 msgstr "FastAPI-Server starten"
 
 #: src/ntasker/cli.py:2691
-msgid "Ask a running ntasker server to shut down (POST /shutdown)."
-msgstr "Laufenden ntasker-Server beenden (POST /shutdown)."
+msgid "Ask a running nTasker server to shut down (POST /shutdown)."
+msgstr "Laufenden nTasker-Server beenden (POST /shutdown)."
 
 #: src/ntasker/cli.py:2700
-msgid "Stop a running ntasker server, then start it again."
-msgstr "Laufenden ntasker-Server beenden und wieder starten."
+msgid "Stop a running nTasker server, then start it again."
+msgstr "Laufenden nTasker-Server beenden und wieder starten."
 
 #: src/ntasker/cli.py:2712
 msgid ""
@@ -3720,8 +3720,8 @@ msgid "Show cache state + active mode."
 msgstr "Cache-Zustand + Modus anzeigen."
 
 #: src/ntasker/cli.py:3230
-msgid "Install ntasker as an OS service (systemd / launchd)."
-msgstr "ntasker als Systemdienst einrichten (systemd / launchd)."
+msgid "Install nTasker as an OS service (systemd / launchd)."
+msgstr "nTasker als Systemdienst einrichten (systemd / launchd)."
 
 #: src/ntasker/cli.py:3234
 msgid "Install + enable the service."
@@ -3758,8 +3758,8 @@ msgid "Restart even while task sessions run (they get killed)."
 msgstr "Auch dann neu starten, wenn Task-Sitzungen laufen (sie werden beendet)."
 
 #: src/ntasker/cli.py:3272
-msgid "Upgrade ntasker from PyPI, then restart the service."
-msgstr "ntasker von PyPI aktualisieren, dann den Dienst neu starten."
+msgid "Upgrade nTasker from PyPI, then restart the service."
+msgstr "nTasker von PyPI aktualisieren, dann den Dienst neu starten."
 
 #: src/ntasker/cli.py:3277
 msgid "Upgrade only; do not restart the running service."
@@ -3783,8 +3783,8 @@ msgstr "Skript und die Zeile in der rc-Datei entfernen."
 
 #: src/ntasker/cli.py:3364
 #, python-brace-format
-msgid "ntasker: creating DB at {path}"
-msgstr "ntasker: erstelle DB bei {path}"
+msgid "nTasker: creating DB at {path}"
+msgstr "nTasker: erstelle DB bei {path}"
 
 #: src/ntasker/newproject.py:90
 msgid "git is not installed"
@@ -3848,8 +3848,8 @@ msgid "removed {path}"
 msgstr "{path} entfernt"
 
 #: src/ntasker/service.py:401
-msgid "nothing to remove -- no ntasker units installed."
-msgstr "nichts zu entfernen -- keine ntasker-Units installiert."
+msgid "nothing to remove -- no nTasker units installed."
+msgstr "nichts zu entfernen -- keine nTasker-Units installiert."
 
 #: src/ntasker/service.py:480
 #, python-brace-format
@@ -4201,24 +4201,24 @@ msgid ""
 "Let sessions you start in a terminal report themselves, so the board can "
 "pick one up and carry on with it. This adds two hooks to your own Claude "
 "Code settings file (a backup is kept); switching it off removes them "
-"again. Without it, ntasker still finds past sessions of a project but "
+"again. Without it, nTasker still finds past sessions of a project but "
 "cannot tell which are still running."
 msgstr ""
 "Lässt Sessions, die du im Terminal startest, sich selbst melden – dann "
 "kann das Board eine übernehmen und fortführen. Dafür kommen zwei Hooks in"
 " deine eigene Claude-Code-Konfiguration (eine Sicherung bleibt erhalten);"
-" beim Ausschalten werden sie wieder entfernt. Ohne das findet ntasker "
+" beim Ausschalten werden sie wieder entfernt. Ohne das findet nTasker "
 "zwar frühere Sessions eines Projekts, weiß aber nicht, welche davon noch "
 "laufen."
 
 #: src/ntasker/settings.py:742
 msgid ""
-"Let Claude run ntasker commands without stopping to ask for each one. "
+"Let Claude run nTasker commands without stopping to ask for each one. "
 "This adds one allow rule to your own Claude Code settings file (a backup "
 "is kept); switching it off removes it again. Without it a session has to "
 "ask before it can even report its own task as finished."
 msgstr ""
-"Lässt Claude ntasker-Kommandos ausführen, ohne bei jedem einzelnen "
+"Lässt Claude nTasker-Kommandos ausführen, ohne bei jedem einzelnen "
 "nachzufragen. Dafür kommt eine Erlaubnis-Regel in deine eigene Claude-"
 "Code-Konfiguration (eine Sicherung bleibt erhalten); beim Ausschalten "
 "wird sie wieder entfernt. Ohne das muss eine Session schon nachfragen, "
@@ -4287,10 +4287,10 @@ msgstr ""
 
 #: src/ntasker/settings.py:776
 msgid ""
-"Shell command run by 'self-update' to upgrade ntasker (e.g. `uv tool "
-"upgrade ntasker`). Unset to auto-detect how ntasker was installed."
+"Shell command run by 'self-update' to upgrade nTasker (e.g. `uv tool "
+"upgrade ntasker`). Unset to auto-detect how nTasker was installed."
 msgstr ""
-"Shell-Befehl, den 'self-update' zum Aktualisieren von ntasker ausführt "
+"Shell-Befehl, den 'self-update' zum Aktualisieren von nTasker ausführt "
 "(z. B. `uv tool upgrade ntasker`). Leer lassen, um die Installationsart "
 "automatisch zu erkennen."
 
@@ -4376,8 +4376,8 @@ msgid "Pick up terminal sessions"
 msgstr "Terminal-Sessions übernehmen"
 
 #: src/ntasker/settings.py:813
-msgid "Run ntasker commands without asking"
-msgstr "ntasker-Kommandos ohne Nachfrage ausführen"
+msgid "Run nTasker commands without asking"
+msgstr "nTasker-Kommandos ohne Nachfrage ausführen"
 
 #: src/ntasker/settings.py:814
 msgid "Require a clean git state"
@@ -4933,13 +4933,13 @@ msgstr "Verwenden"
 msgid ""
 "Whisper models understand every language and punctuate by themselves, but"
 " need more CPU; Vosk models are per language and answer instantly. Small "
-"models answer fastest, the big ones are noticeably more accurate. ntasker"
+"models answer fastest, the big ones are noticeably more accurate. nTasker"
 " downloads in the background into {dir}."
 msgstr ""
 "Whisper-Modelle verstehen alle Sprachen und setzen Satzzeichen selbst, "
 "brauchen aber mehr CPU; Vosk-Modelle gibt es je Sprache, sie antworten "
 "sofort. Kleine Modelle antworten am schnellsten, die großen sind deutlich"
-" genauer. ntasker lädt im Hintergrund nach {dir} herunter."
+" genauer. nTasker lädt im Hintergrund nach {dir} herunter."
 
 #: src/ntasker/plugins/voice/__init__.py:76
 #, python-brace-format
@@ -5648,18 +5648,18 @@ msgstr "Diese Aufgabe ist ein Entwurf"
 
 #: src/ntasker/templates/info.html:117
 msgid ""
-"ntasker is a lightweight, single-user tracker for your AI coding agent "
+"nTasker is a lightweight, single-user tracker for your AI coding agent "
 "tasks -- FastAPI + SQLite, Tabler.io UI, no build step."
 msgstr ""
-"ntasker ist ein schlanker Single-User-Tracker für deine AI-Coding-Agent-"
+"nTasker ist ein schlanker Single-User-Tracker für deine AI-Coding-Agent-"
 "Tasks -- FastAPI + SQLite, Tabler.io-UI, ohne Build-Schritt."
 
 #: src/ntasker/templates/info.html:130
 msgid ""
-"Built and maintained by Christian González. If ntasker saves you time, a "
+"Built and maintained by Christian González. If nTasker saves you time, a "
 "coffee keeps it going."
 msgstr ""
-"Entwickelt und gepflegt von Christian González. Wenn ntasker dir Zeit "
+"Entwickelt und gepflegt von Christian González. Wenn nTasker dir Zeit "
 "spart, hält ein Kaffee es am Laufen."
 
 #: src/ntasker/templates/info.html:158
@@ -5719,8 +5719,8 @@ msgid "Terminal sessions"
 msgstr "Session fortsetzen"
 
 #: src/ntasker/templates/settings.html:249
-msgid "Carry on with a conversation you started outside ntasker."
-msgstr "Ein Gespräch fortführen, das du außerhalb von ntasker begonnen hast."
+msgid "Carry on with a conversation you started outside nTasker."
+msgstr "Ein Gespräch fortführen, das du außerhalb von nTasker begonnen hast."
 
 #: src/ntasker/templates/settings.html:256
 msgid "Hooks are written to"
@@ -5891,11 +5891,11 @@ msgstr "Shell-Vervollständigung"
 
 #: src/ntasker/templates/settings.html:592
 msgid ""
-"Tab completion for the ntasker CLI. Installing writes a script to the "
+"Tab completion for the nTasker CLI. Installing writes a script to the "
 "user-data dir and sources it from the shell's startup file; open a new "
 "shell afterwards."
 msgstr ""
-"Tab-Vervollständigung für die ntasker-CLI. Die Installation schreibt ein "
+"Tab-Vervollständigung für die nTasker-CLI. Die Installation schreibt ein "
 "Skript ins Benutzerdaten-Verzeichnis und lädt es aus der Startdatei der "
 "Shell; danach eine neue Shell öffnen."
 

@@ -735,11 +735,11 @@ HINTS: dict[str, object] = {
         "Let sessions you start in a terminal report themselves, so the board "
         "can pick one up and carry on with it. This adds two hooks to your own "
         "Claude Code settings file (a backup is kept); switching it off removes "
-        "them again. Without it, ntasker still finds past sessions of a project "
+        "them again. Without it, nTasker still finds past sessions of a project "
         "but cannot tell which are still running."
     ),
     "claude_permissions": _lazy(
-        "Let Claude run ntasker commands without stopping to ask for each one. "
+        "Let Claude run nTasker commands without stopping to ask for each one. "
         "This adds one allow rule to your own Claude Code settings file (a "
         "backup is kept); switching it off removes it again. Without it a "
         "session has to ask before it can even report its own task as finished."
@@ -773,8 +773,8 @@ HINTS: dict[str, object] = {
         "and send it, e.g. \"write the report and hand off to review\"."
     ),
     "update_command": _lazy(
-        "Shell command run by 'self-update' to upgrade ntasker "
-        "(e.g. `uv tool upgrade ntasker`). Unset to auto-detect how ntasker "
+        "Shell command run by 'self-update' to upgrade nTasker "
+        "(e.g. `uv tool upgrade ntasker`). Unset to auto-detect how nTasker "
         "was installed."
     ),
     "plugins_disabled": _lazy(
@@ -810,7 +810,7 @@ LABELS: dict[str, object] = {
     "triage_model": _lazy("Inbox triage model"),
     "dir_locks": _lazy("Directory locks"),
     "session_discovery": _lazy("Pick up terminal sessions"),
-    "claude_permissions": _lazy("Run ntasker commands without asking"),
+    "claude_permissions": _lazy("Run nTasker commands without asking"),
     "require_clean": _lazy("Require a clean git state"),
     "quicktasks_bypass_lanes": _lazy("Quicktasks bypass the lanes"),
     "reports": _lazy("Reports"),

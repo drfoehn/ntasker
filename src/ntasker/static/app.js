@@ -4101,7 +4101,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                     this.loadClaudeSessions();
                 } else if (msg.type === 'error') {
                     ended = true;
-                    term.write(`\r\n\x1b[31m[ntasker] ${msg.error}\x1b[0m\r\n`);
+                    term.write(`\r\n\x1b[31m[nTasker] ${msg.error}\x1b[0m\r\n`);
                     this._setTabStatus(taskId, 'exited');
                 }
             };
@@ -4109,13 +4109,13 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                 if (!opened) {
                     // Never connected: the tab would just show a blinking
                     // cursor forever -- say so in the terminal and as a toast.
-                    try { term.write(`\r\n\x1b[31m[ntasker] ${_i('claude_connect_failed')}\x1b[0m\r\n`); } catch (_e) { /* disposed */ }
+                    try { term.write(`\r\n\x1b[31m[nTasker] ${_i('claude_connect_failed')}\x1b[0m\r\n`); } catch (_e) { /* disposed */ }
                     this.showToast(_i('claude_connect_failed'), 'danger');
                     this._setTabStatus(taskId, 'exited');
                 } else if (!ended) {
                     // Dropped mid-session without an exit/error (e.g. server
                     // restart): the screen would freeze without a trace.
-                    try { term.write(`\r\n\x1b[31m[ntasker] ${_i('claude_disconnected')}\x1b[0m\r\n`); } catch (_e) { /* disposed */ }
+                    try { term.write(`\r\n\x1b[31m[nTasker] ${_i('claude_disconnected')}\x1b[0m\r\n`); } catch (_e) { /* disposed */ }
                     this._setTabStatus(taskId, 'exited');
                 }
                 this.loadClaudeSessions();

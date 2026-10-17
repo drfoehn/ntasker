@@ -342,7 +342,7 @@ class QueueIn(BaseModel):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="ntasker",
+    title="nTasker",
     description="Local single-user task tracker.",
     version=VERSION,
     docs_url="/api/docs",
@@ -512,7 +512,7 @@ def build_js_strings() -> dict[str, str]:
         "update_install_prompt": _("Version {latest} is available (you are running {current})."),
         "update_installing": _("Installing update..."),
         "update_done_restart": _("Update installed -- restarting the server..."),
-        "update_done_manual": _("Update installed -- restart ntasker to use the new version."),
+        "update_done_manual": _("Update installed -- restart nTasker to use the new version."),
         "update_blocked_tasks": _(
             "Update blocked -- {n} task session(s) still running. "
             "The restart would interrupt them; finish them first."
@@ -922,7 +922,7 @@ def build_js_strings() -> dict[str, str]:
         "reset_default": _("Reset to default"),
         "agent_integration": _("AI agent integration"),
         "agent_integration_intro": _(
-            "ntasker ships a skill (SKILL.md) and a /task <id> slash command for "
+            "nTasker ships a skill (SKILL.md) and a /task <id> slash command for "
             "each agent. This shows the install status per agent -- writes go "
             "exclusively through the CLI."
         ),
@@ -1022,7 +1022,7 @@ def build_js_strings() -> dict[str, str]:
         "session_pickup_bound": _("Already on task #{id}"),
         "session_running": _("Running"),
         "session_discovery_off": _(
-            "ntasker only sees which sessions are running with \"Pick up terminal "
+            "nTasker only sees which sessions are running with \"Pick up terminal "
             "sessions\" switched on."
         ),
         "session_pickup_open_settings": _("Open settings"),
@@ -1121,7 +1121,7 @@ def build_js_strings() -> dict[str, str]:
             "You are running {current}, but {latest} is available on PyPI. "
             "Update with:"
         ),
-        "up_to_date": _("ntasker is up to date."),
+        "up_to_date": _("nTasker is up to date."),
         "update_check_failed": _("Could not reach PyPI to check for updates."),
         "checking_updates": _("Checking for updates..."),
         "about": _("About"),

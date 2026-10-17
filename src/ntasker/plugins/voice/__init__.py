@@ -71,7 +71,7 @@ def _js_strings() -> dict[str, str]:
             "Whisper models understand every language and punctuate by themselves, "
             "but need more CPU; Vosk models are per language and answer instantly. "
             "Small models answer fastest, the big ones are noticeably more accurate. "
-            "ntasker downloads in the background into {dir}."
+            "nTasker downloads in the background into {dir}."
         ),
         "voice_catalog_offline": _("The catalog could not be loaded: {detail}"),
         "voice_language": _("Language"),

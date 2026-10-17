@@ -241,7 +241,7 @@ def _systemd_units(host: str, port: int, db_path: str | None, auto_update: bool)
             d / SYSTEMD_SERVICE,
             f"""\
 [Unit]
-Description=ntasker -- local task tracker
+Description=nTasker -- local task tracker
 After=network.target
 
 [Service]
@@ -262,7 +262,7 @@ WantedBy=default.target
                 d / SYSTEMD_UPDATE_SERVICE,
                 f"""\
 [Unit]
-Description=ntasker -- upgrade from PyPI and restart
+Description=nTasker -- upgrade from PyPI and restart
 
 [Service]
 Type=oneshot
@@ -273,7 +273,7 @@ ExecStart={exec_update}
                 d / SYSTEMD_UPDATE_TIMER,
                 """\
 [Unit]
-Description=ntasker -- daily auto-update
+Description=nTasker -- daily auto-update
 
 [Timer]
 OnCalendar=daily
@@ -398,7 +398,7 @@ def uninstall() -> list[str]:
                 p.unlink()
                 log.append(_("removed {path}").format(path=p))
     if not log:
-        log.append(_("nothing to remove -- no ntasker units installed."))
+        log.append(_("nothing to remove -- no nTasker units installed."))
     return log
 
 

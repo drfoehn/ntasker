@@ -340,7 +340,7 @@ def main(argv: list[str]) -> int:
             f"Task #{tid} not found.\n"
             "  - Is the server reachable at http://127.0.0.1:8766?\n"
             "    -> start it with `ntasker serve`.\n"
-            "  - If ntasker is not installed yet:\n"
+            "  - If nTasker is not installed yet:\n"
             "    -> `uv tool install ntasker` (or `pip install --user ntasker`)\n"
             "  - For a non-default DB path: `NTASKER_DB=/path/to/tasks.db ntasker show "
             f"{tid} --json`",
