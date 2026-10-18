@@ -83,14 +83,17 @@ import asyncio
 import contextlib
 import sqlite3
 import sys
+from datetime import datetime
 
 from ntasker import lockqueue, locks, messages, worktrees
 from ntasker.agents import agent_keys, get_spec, resolve_agent_key
 from ntasker.claude_runner import (
     active_session_ids,
     external_session_ids,
+    limit_hold_until,
     mark_wip,
     queue_seed_for_task,
+    resume_limited,
     start_detached_session,
     stop_session,
     terminal_available,
@@ -364,8 +367,15 @@ def _runnable_agents() -> set[str]:
     Resolved once per tick: ``terminal_available`` reads the agent's binary
     override from the settings store, so asking it per queued task would mean a
     fresh DB connection per row, every two seconds, forever.
+
+    Claude is left out while a usage limit is active (see
+    :func:`~ntasker.claude_runner.limit_hold_until`): a new run would only hit
+    it at once and sit parked in its lane.
     """
-    return {key for key in agent_keys() if terminal_available(get_spec(key))[0]}
+    keys = {key for key in agent_keys() if terminal_available(get_spec(key))[0]}
+    if limit_hold_until() is not None:
+        keys.discard("claude")
+    return keys
 
 
 def _startable(
@@ -418,10 +428,12 @@ def _lock_reason(
 
 
 def skipped(rows: list[sqlite3.Row], live: set[int]) -> dict[int, dict]:
-    """Lock / dirty reasons per queued task id, for the queue panel.
+    """Lock / dirty / limit reasons per queued task id, for the queue panel.
 
     Same rules as the start step: only while ``dir_locks`` is on, only for
     tasks without a live session, and a lock conflict wins over the git check.
+    A Claude task waiting for a usage limit to reset (``limit``, with ``until``
+    as ISO time) is named regardless of ``dir_locks``.
     """
     from ntasker.settings import get_dir_locks, get_require_clean  # noqa: PLC0415
 
@@ -430,6 +442,14 @@ def skipped(rows: list[sqlite3.Row], live: set[int]) -> dict[int, dict]:
         for row in rows
         if row["session_ended_at"] and int(row["id"]) not in live and int(row["id"]) not in RESUME
     }
+    hold = limit_hold_until()
+    if hold is not None:
+        until = datetime.fromtimestamp(hold).astimezone().isoformat()
+        default_agent = resolve_agent_key(None)
+        for row in rows:
+            key = row["agent"] if row["agent"] in agent_keys() else default_agent
+            if key == "claude" and int(row["id"]) not in live and int(row["id"]) not in out:
+                out[int(row["id"])] = {"reason": "limit", "project": row["project"], "holder": None, "until": until}
     if not rows or not get_dir_locks():
         return out
     require_clean = get_require_clean()
@@ -681,8 +701,6 @@ def tick() -> None:
 
 
 def _now() -> str:
-    from datetime import datetime  # noqa: PLC0415
-
     return datetime.now().isoformat(timespec="seconds")
 
 
@@ -703,3 +721,6 @@ async def worker() -> None:
         # Pending agent-to-agent messages go into sessions whose turn is over.
         with contextlib.suppress(Exception):
             await messages.deliver()
+        # Sessions a usage limit stopped go on once it has reset.
+        with contextlib.suppress(Exception):
+            await resume_limited()

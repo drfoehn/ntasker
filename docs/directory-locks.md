@@ -108,7 +108,7 @@ shipped as package data in `src/ntasker/claude_assets/hooks/`:
 
 | File | Passed when | Hooks |
 |---|---|---|
-| `base.json` | `dir_locks` off | `SessionStart` (`clear`) -> `ntasker hook clear`; `Stop`, `Notification` (`permission_prompt`) -> `ntasker hook waiting`; `UserPromptSubmit`, `PostToolUse` -> `ntasker hook running`; `PreToolUse` (`AskUserQuestion`) -> `ntasker hook ask` |
+| `base.json` | `dir_locks` off | `SessionStart` (`clear`) -> `ntasker hook clear`; `Stop`, `Notification` (`permission_prompt`) -> `ntasker hook waiting`; `UserPromptSubmit`, `PostToolUse` -> `ntasker hook running`; `PreToolUse` (`AskUserQuestion`) -> `ntasker hook ask`; `StopFailure` (`rate_limit`) -> `ntasker hook limit` |
 | `locks.json` | `dir_locks` on | the same, plus `PreToolUse` (`Edit\|Write\|MultiEdit\|NotebookEdit\|Bash`) -> `ntasker hook pretooluse` |
 
 The state hooks give the board an **explicit** waiting / running signal instead of the output-silence heuristic (see
@@ -144,7 +144,7 @@ have no settings flag and keep the heuristic.
 | `src/ntasker/lockqueue.py` | `lock add --wait`: `request`, `grant` (worker), `deadlock`. |
 | `src/ntasker/taskqueue.py` | `_lock_reason` (shared by the start step and `skipped`), the gate and the grant in `tick`. |
 | `src/ntasker/app.py` | `locks` on create/update, `/api/tasks/<id>/locks`, `/api/locks/check`, the release in `/api/tasks/<id>/outcome`, `skipped` in `/api/queue`. |
-| `src/ntasker/cli.py` | `ntasker lock add\|rm\|list`, `--locks` on `add`/`patch`, `ntasker hook waiting\|running\|ask\|pretooluse`. |
+| `src/ntasker/cli.py` | `ntasker lock add\|rm\|list`, `--locks` on `add`/`patch`, `ntasker hook waiting\|running\|ask\|limit\|pretooluse`. |
 | `src/ntasker/claude_assets/hooks/*.json`, `claude_assets.hooks_settings_path` | The two `--settings` files and which one a spawn gets. |
 | `src/ntasker/agents.py`, `plugins/claude` | `AgentSpec.settings_flag`, `build_spawn(settings_path=)`. |
 | `src/ntasker/claude_runner.py` | `TermSession.hook_waiting`, `set_hook_state`, `NTASKER_TASK_ID`/`NTASKER_URL` in the child env. |

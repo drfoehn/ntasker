@@ -1465,7 +1465,7 @@
                                 <template x-if="queueItemNote(item)">
                                     <span class="badge bg-danger-lt task-queue-blocker text-truncate"
                                           :title="blockerDetail(item)">
-                                        <i class="ti" :class="[(queueSkipped[item.id] || {}).reason === 'ended' ? 'ti-player-stop' : 'ti-lock', blockerLabel(item) && 'me-1']"></i><span x-text="blockerLabel(item)"></span>
+                                        <i class="ti" :class="[({ended: 'ti-player-stop', limit: 'ti-hourglass-high'})[(queueSkipped[item.id] || {}).reason] || 'ti-lock', blockerLabel(item) && 'me-1']"></i><span x-text="blockerLabel(item)"></span>
                                     </span>
                                 </template>
 

@@ -2174,11 +2174,17 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         queueItemNote(item) {
             const ended = (this.queueSkipped[item.id] || {}).reason === 'ended';
             if (ended) return _i('queue_ended');   // the one the user has to act on
+            if ((this.queueSkipped[item.id] || {}).reason === 'limit') return this.queueLimitNote(item);
             if (this.isBlocked(item)) return _i('queue_blocked');
             if (!this.taskRunnable(item)) return _i('queue_agent_missing');
             const skip = this.queueSkipped[item.id];
             if (skip) return skip.reason === 'dirty' ? _i('queue_dirty') : _i('queue_locked');
             return '';
+        },
+
+        // A Claude entry held back until the usage limit resets, with that time.
+        queueLimitNote(item) {
+            return _i('queue_limit') + ' ' + this.formatAbsolute(this.queueSkipped[item.id].until);
         },
 
         // Lock badge, inline: just the blocking ids -- or, for a directory
@@ -2187,6 +2193,10 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // ids are what you act on.
         blockerLabel(item) {
             if ((this.queueSkipped[item.id] || {}).reason === 'ended') return _i('queue_ended_badge');
+            if ((this.queueSkipped[item.id] || {}).reason === 'limit') {
+                return this._toDate(this.queueSkipped[item.id].until)
+                    .toLocaleTimeString(_locale(), { timeStyle: 'short' });
+            }
             if (this.isBlocked(item)) return this.blockingDeps(item).map(d => `#${d.id}`).join(', ');
             if (!this.taskRunnable(item)) return '';
             const skip = this.queueSkipped[item.id];
@@ -2200,6 +2210,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // dependencies matter to the queue.
         blockerDetail(item) {
             if ((this.queueSkipped[item.id] || {}).reason === 'ended') return _i('queue_ended');
+            if ((this.queueSkipped[item.id] || {}).reason === 'limit') return this.queueLimitNote(item);
             if (!this.isBlocked(item)) {
                 if (!this.taskRunnable(item)) return _i('queue_agent_missing');
                 const skip = this.queueSkipped[item.id] || {};
@@ -4416,6 +4427,8 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             if (this.claudeView !== id) return;   // switched tabs meanwhile
             const same = this.conv && this.conv.taskId === id && this.conv.updated === d.updated;
             this.conv = { taskId: id, supported: d.supported, available: d.available, updated: d.updated };
+            // Its resume time can change without the transcript changing.
+            this.convBlocker = d.blocker || null;
             if (same && !force) return;
             const prev = this.convTurns;
             const body = this.$refs.convBody;
@@ -4423,7 +4436,6 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                 || body.scrollHeight - body.scrollTop - body.clientHeight < 80;
             this.convUsage = d.usage || null;
             this.convContext = d.context || null;
-            this.convBlocker = d.blocker || null;
             this.convTurns = (d.turns || []).map((t, i) => {
                 const old = prev[i];
                 const html = (text, oldText, oldHtml) => (old && oldText === text ? oldHtml : renderMarkdown(text || ''));

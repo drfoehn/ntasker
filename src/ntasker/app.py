@@ -51,6 +51,7 @@ from ntasker.claude_runner import (
     bind_session,
     external_session_ids,
     idle_session_ids,
+    limit_resume_at,
     open_questions,
     planner_seed,
     projects_base_dir,
@@ -574,6 +575,7 @@ def build_js_strings() -> dict[str, str]:
         "queue_ended_badge": _("ended"),
         "queue_locked": _("Waiting -- another task's session holds one of its directories."),
         "queue_dirty": _("Waiting -- a directory it holds has uncommitted changes."),
+        "queue_limit": _("Waiting -- the usage limit resets at"),
         # Directory locks (form + edit chips, board badge)
         "locks_label": _("Also locks"),
         "locks_placeholder": _("project name, Enter"),
@@ -710,6 +712,7 @@ def build_js_strings() -> dict[str, str]:
         "conv_blocker_limit_hint": _(
             "The agent cannot go on until the limit resets. Reply then to continue, or switch the model in the terminal."
         ),
+        "conv_blocker_limit_resume": _("nTasker tells the agent to continue at"),
         "conv_blocker_auth": _("Not logged in"),
         "conv_blocker_auth_hint": _("Open the terminal and run /login, then send your instruction again."),
         "conv_blocker_billing": _("Billing problem"),
@@ -3481,7 +3484,7 @@ def api_task_conversation(task_id: int) -> JSONResponse:
     """The run's conversation: the run view's Conversation pane.
 
     ``{"supported": bool, "available": bool, "turns": [...], "usage": {...},
-    "context": {used, limit}|null, "blocker": {kind, text, at}|null, "updated": float|null}`` -- read from the agent's session transcript of the
+    "context": {used, limit}|null, "blocker": {kind, text, at, resume_at?}|null, "updated": float|null}`` -- read from the agent's session transcript of the
     task's stored session; turn fields see
     :func:`ntasker.transcript.parse_transcript`. ``supported`` is ``False`` for
     an agent without a readable transcript (the UI then shows the terminal);
@@ -3507,6 +3510,11 @@ def api_task_conversation(task_id: int) -> JSONResponse:
     # The model the session was spawned with decides the context window size.
     model = row["model"] or get_setting(spec.model_setting_key, env_var=spec.model_env_var)
     conv = conversation_for(resolve_home(spec), row["session_id"], rules, model)
+    # A usage limit the queue worker will resume from: say when.
+    resume_at = limit_resume_at(task_id)
+    if conv.get("blocker") and conv["blocker"]["kind"] == "limit" and resume_at is not None:
+        at = datetime.fromtimestamp(resume_at).astimezone().isoformat()
+        conv = {**conv, "blocker": {**conv["blocker"], "resume_at": at}}  # parsed transcripts are cached
     return JSONResponse({"supported": True, **conv, "peer_names": messages.address_names()})
 
 

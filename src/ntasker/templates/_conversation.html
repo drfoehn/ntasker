@@ -284,6 +284,9 @@
                                     x-text="$i18n('conv_blocker_' + blockerKind(convBlocker))"></span></div>
                             <div class="font-monospace small mb-2 text-break" x-show="convBlocker?.text" x-text="convBlocker?.text"></div>
                             <div class="text-secondary small mb-2" x-text="$i18n('conv_blocker_' + blockerKind(convBlocker) + '_hint')"></div>
+                            <div class="small mb-2" x-show="convBlocker?.resume_at">
+                                <i class="ti ti-player-play me-1"></i><span x-text="$i18n('conv_blocker_limit_resume') + ' ' + formatAbsolute(convBlocker?.resume_at)"></span>
+                            </div>
                             <div class="d-flex align-items-center flex-wrap gap-2">
                                 <button type="button" class="btn btn-sm btn-outline-danger" @click="setRunMode('terminal')">
                                     <i class="ti ti-terminal-2 me-1"></i><span x-text="$i18n('conv_show_terminal')"></span>

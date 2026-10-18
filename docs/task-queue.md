@@ -154,6 +154,8 @@ An entry stays queued but is passed over when
 
 * one of its dependencies is still open (the same guard the kanban drag applies), or
 * its agent's CLI is not installed, or
+* it is a Claude task and a usage limit is active (badge: the reset time, see
+  [claude-runs.md](claude-runs.md#resuming-after-a-usage-limit)), or
 * another task's live session holds one of its directories (badge `#<holder>`), or
 * with `require_clean` on, one of its directories has uncommitted changes (badge `dirty: <project>`).
 
@@ -300,7 +302,7 @@ id deserves to be told.
 
 | Route | What it does |
 |---|---|
-| `GET /api/queue` | `{enabled, items: [task, ...], skipped: {id: {reason, project, holder}}}` -- full task rows in run order (a queued task may be filtered off the board and the panel still has to render it); `skipped` holds the reasons `lock` / `dirty` / `ended`. |
+| `GET /api/queue` | `{enabled, items: [task, ...], skipped: {id: {reason, project, holder}}}` -- full task rows in run order (a queued task may be filtered off the board and the panel still has to render it); `skipped` holds the reasons `lock` / `dirty` / `ended` / `limit` (with `until`, ISO). |
 | `PUT /api/queue` | Body `{ids: [...]}` replaces the whole queue, head first. Ids that are closed, archived or gone are dropped. An empty list clears the queue. Never restarts an `ended` entry. |
 | `POST /api/queue/run` | Body `{id}` -- the run button: appends the task to the queue (an already-queued id keeps its place), moves it to `phase=wip` right away and clears its `ended` flag. Returns the queue. |
 | `POST /api/queue/start-now` | Body `{id}` -- the start-now button on a waiting entry: the worker starts it next tick although its lane is busy, a directory is held or git-dirty. 409 when the task is not a waiting queue entry (live, `ended`, not queued), the queue is paused, a dependency is open or its agent is missing. Returns the queue. |

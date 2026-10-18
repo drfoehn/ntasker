@@ -21,6 +21,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime
 from typing import Any
 
 from ntasker.agents import AGENTS, resolve_home
@@ -92,3 +93,33 @@ def snapshot(force: bool = False) -> dict[str, Any] | None:
             usage = None  # a login without subscription limits (console account)
         _cache.update(at=time.time(), usage=usage)
         return usage
+
+
+def limit_reset() -> float | None:
+    """Epoch seconds at which the limit that just stopped a session resets, or ``None``.
+
+    Asked by the ``StopFailure`` hook (``rate_limit``): the hook itself only
+    says *that* a limit was hit, the end time comes from the windows'
+    ``resets_at``. A window at 100 % is the one that bites -- several of them
+    (5-hour and weekly) release the session only once the last one resets.
+    With none at 100 % yet (the figure lags a little) the fullest window is
+    the best guess; guessing too early only costs a retry that hits the limit
+    again and is rescheduled. ``None`` without a subscription or a reset time.
+    """
+    windows = [w for w in (snapshot(force=True) or {}).values() if w and w.get("resets_at")]
+    full = [w for w in windows if w["utilization"] >= 100]
+    if full:
+        pick = max(full, key=lambda w: _epoch(w["resets_at"]) or 0.0)
+    elif windows:
+        pick = max(windows, key=lambda w: w["utilization"])
+    else:
+        return None
+    return _epoch(pick["resets_at"])
+
+
+def _epoch(stamp: Any) -> float | None:
+    """An ISO timestamp (``resets_at``) as epoch seconds, ``None`` when unreadable."""
+    try:
+        return datetime.fromisoformat(str(stamp)).timestamp()
+    except ValueError:
+        return None

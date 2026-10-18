@@ -1874,6 +1874,24 @@ def cmd_hook_ask(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hook_limit(args: argparse.Namespace) -> int:
+    """``StopFailure`` with ``rate_limit``: a usage limit ended the turn.
+
+    Fires instead of ``Stop``. The server parks the session and resumes it
+    once the limit has reset (see :func:`ntasker.claude_runner.set_limited`).
+    A subagent's failure says nothing about the main session.
+    """
+    ctx = _hook_context()
+    if ctx is None:
+        return 0
+    task_id, base, payload = ctx
+    if payload.get("agent_id"):
+        return 0
+    with contextlib.suppress(Exception):
+        _api_call(base, "POST", f"/api/claude/sessions/{task_id}/limit", {}, 10.0)
+    return 0
+
+
 def cmd_hook_clear(args: argparse.Namespace) -> int:
     """``SessionStart`` after ``/clear``: move the task to the new session id.
 
@@ -3039,6 +3057,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("waiting", cmd_hook_waiting),
         ("running", cmd_hook_running),
         ("ask", cmd_hook_ask),
+        ("limit", cmd_hook_limit),
         ("clear", cmd_hook_clear),
         ("pretooluse", cmd_hook_pretooluse),
         ("session", cmd_hook_session),

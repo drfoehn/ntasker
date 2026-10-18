@@ -500,6 +500,12 @@ class TermSession:
     # as the session's hooks report it -- what other Claude sessions address
     # with ``SendMessage`` (see :mod:`ntasker.messages`). ``None`` until reported.
     socket: str | None = None
+    # A usage limit ended the agent's turn (``StopFailure`` hook, see
+    # :func:`set_limited`): the session sits at its prompt until the limit
+    # resets. ``resume_at`` is that moment (epoch seconds), when known --
+    # :func:`resume_limited` then tells the agent to continue.
+    limited: bool = False
+    resume_at: float | None = None
     # The event loop the PTY reader lives on (set by :func:`_attach_reader`).
     # :func:`_stop` may run off-loop (a sync route in the threadpool) and needs
     # it to hand the final teardown back to the loop thread.
@@ -581,9 +587,84 @@ def set_hook_state(
         sess.socket = socket
     sess.hook_waiting = waiting
     sess.turn_over = waiting and turn_over
+    # Any other report means the session got going again (the user replied).
+    sess.limited = False
+    sess.resume_at = None
     if not waiting:
         sess.question = None
     return True
+
+
+#: Sent into a session once its usage limit has reset (see :func:`resume_limited`).
+RESUME_PROMPT = "[nTasker] The usage limit has reset. Continue your task where you left off."
+
+#: Seconds past the reported reset before the session is resumed -- a resume a
+#: little early would just hit the limit again.
+RESUME_GRACE_SECONDS = 60.0
+
+
+#: When the last reported usage limit resets (epoch seconds), ``None`` = none known.
+#: The limit is the account's, not one session's: until then the queue starts no
+#: further Claude run (see :func:`limit_hold_until`).
+LIMIT_UNTIL: float | None = None
+
+
+def limit_hold_until() -> float | None:
+    """Until when new Claude runs wait for a usage limit (epoch seconds), or ``None``.
+
+    The same moment :func:`limit_resume_at` resumes the parked sessions -- the
+    held-back runs then start alongside them.
+    """
+    if LIMIT_UNTIL is None or LIMIT_UNTIL + RESUME_GRACE_SECONDS <= time.time():
+        return None
+    return LIMIT_UNTIL + RESUME_GRACE_SECONDS
+
+
+def set_limited(task_id: int, resume_at: float | None) -> bool:
+    """Record that a usage limit ended the session's turn. ``False`` = no live session.
+
+    Reported by the ``StopFailure`` hook (``rate_limit``), which fires instead
+    of ``Stop``. The session waits, but not with its turn over: queued
+    messages must not go in (they would hit the limit too). ``resume_at``:
+    when the limit resets (epoch seconds), ``None`` when unknown -- then the
+    session stays put until the user replies. A known reset also holds back
+    the queue's further Claude runs (:data:`LIMIT_UNTIL`).
+    """
+    sess = SESSIONS.get(task_id)
+    if sess is None or not sess.alive:
+        return False
+    sess.hook_waiting = True
+    sess.turn_over = False
+    sess.limited = True
+    sess.resume_at = resume_at
+    global LIMIT_UNTIL
+    if resume_at is not None:
+        LIMIT_UNTIL = max(LIMIT_UNTIL or 0.0, resume_at)
+    return True
+
+
+def limit_resume_at(task_id: int) -> float | None:
+    """When a limited live session will be resumed (epoch seconds), else ``None``."""
+    sess = SESSIONS.get(task_id)
+    if sess is None or not sess.alive or not sess.limited or sess.resume_at is None:
+        return None
+    return sess.resume_at + RESUME_GRACE_SECONDS
+
+
+async def resume_limited() -> list[int]:
+    """Tell every session whose usage limit has reset to continue; returns their task ids."""
+    now = time.time()
+    due = [tid for tid in SESSIONS if (at := limit_resume_at(tid)) is not None and at <= now]
+    for tid in due:
+        sess = SESSIONS[tid]
+        sess.limited = False
+        sess.resume_at = None
+        sess.hook_waiting = False
+        sess.last_output = time.monotonic()
+        await _write_pty(sess, RESUME_PROMPT.encode())
+        await asyncio.sleep(0.05)
+        await _write_pty(sess, b"\r")
+    return due
 
 
 def set_question(task_id: int, question: dict | None) -> bool:

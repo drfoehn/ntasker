@@ -373,6 +373,32 @@ The server caches the answer for 30 s. A failed refresh serves the last answer.
   refresh asks with `?fresh=1`, which looks past the 30 s cache; a server-side floor of 5 s keeps session churn
   across several open tabs from turning into a request flood.
 
+## Resuming after a usage limit
+
+When a session ntasker spawned hits a usage limit (5-hour or weekly window), ntasker parks it and tells it to go on
+once the limit has reset -- no terminal output is parsed, both facts come as structured data:
+
+- **Detection:** Claude Code fires the `StopFailure` hook instead of `Stop` when an API error ended the turn; its
+  JSON carries `error` (`rate_limit`, `overloaded`, `authentication_failed`, ...). The spawn settings match
+  `rate_limit` and run `ntasker hook limit`, which posts `POST /api/claude/sessions/{task_id}/limit` (a subagent's
+  failure is ignored). The hook payload has no reset time.
+- **End time:** the server asks the usage endpoint (see below) for the windows' `resets_at`. A window at 100 % is
+  the one that bites -- with several full ones the latest reset counts; with none at 100 % yet the fullest window is
+  taken. A guess too early only costs one retry that hits the limit again and is rescheduled.
+- **Resume:** the queue worker types `[nTasker] The usage limit has reset. Continue your task where you left off.`
+  into the session 60 s after that reset. The blocker card in the conversation shows the time.
+
+The limit is the account's, so a known reset also **holds back the queue**: until then it starts no further Claude
+run (other agents keep running). A held-back entry shows an hourglass badge with the reset time; it starts together
+with the resumed sessions.
+
+While parked, the session reads *waiting* but not *turn over*, so queued agent messages are not typed in (they would
+hit the limit too). Any reply of your own clears the parked state. Without a subscription login (no reset time) the
+session stays parked until you reply. Only sessions ntasker spawned can be resumed -- an external `/task` session has
+no terminal ntasker can type into. The parked state lives in memory and ends with the server.
+
+`POST /api/claude/sessions/{task_id}/limit` -> `{"resume_at": ISO | null}`; 404 without a live session.
+
 ## Security
 
 ntasker has no authentication and binds to `127.0.0.1` only. A session is your **full interactive Claude Code, shell
