@@ -668,6 +668,22 @@ def idle_session_ids(states: dict[int, str]) -> list[int]:
     ]
 
 
+def steerable_session_ids() -> list[int]:
+    """Working sessions that take input mid-turn, by their hooks' word.
+
+    Claude Code queues a prompt typed in while it works and hands it to the
+    agent at its next step, inside the running turn. Only a session whose
+    hooks report it working counts: one parked in a permission dialog or a
+    question would take the typed text as its answer, and an agent without
+    hooks (OpenCode / Pi) may not queue at all.
+    """
+    return [
+        tid
+        for tid, s in SESSIONS.items()
+        if s.alive and s.hook_waiting is False and s.question is None
+    ]
+
+
 def _clean_env(spec: AgentSpec, task_id: int, project: str | None = None) -> dict:
     """Child environment: nesting markers stripped, ntasker's own markers added.
 

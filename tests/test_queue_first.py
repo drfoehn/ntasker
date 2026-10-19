@@ -97,7 +97,8 @@ def test_compact_seed_setting_is_gone():
 def test_sessions_payload_has_no_agents(client):
     body = client.get("/api/claude/sessions").json()
     assert "agents" not in body
-    assert set(body) == {"active", "waiting", "external", "projects", "titles", "activity", "questions", "idle"}
+    assert set(body) == {"active", "waiting", "external", "projects", "titles", "activity", "questions", "idle",
+                         "steerable"}
 
 
 def test_enqueue_appends_and_keeps_existing_position(client):

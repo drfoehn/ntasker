@@ -67,7 +67,7 @@ from ntasker.db import (
 from ntasker.i18n import _, resolve_for_cli, set_active_language
 from ntasker.middleware import ALLOWED_HOSTS_ENV, LOOPBACK_HOSTS
 from ntasker.paths import resolve_db_path, warn_if_missing
-from ntasker import locks, taskqueue, worktrees
+from ntasker import locks, messages, taskqueue, worktrees
 from ntasker.settings import (
     delete_setting,
     get_setting_raw,
@@ -959,7 +959,7 @@ def cmd_patch(args: argparse.Namespace) -> int:
 
     with get_conn() as conn:
         exists = conn.execute(
-            "SELECT project, worktree_id FROM tasks WHERE id = ?", (args.task_id,)
+            "SELECT project, worktree_id, fasttrack FROM tasks WHERE id = ?", (args.task_id,)
         ).fetchone()
         if exists is None:
             print(_("nTasker: task #{id} not found").format(id=args.task_id), file=sys.stderr)
@@ -1003,6 +1003,10 @@ def cmd_patch(args: argparse.Namespace) -> int:
         if dep_ids is not None:
             set_task_deps(conn, args.task_id, dep_ids)
             changed.append("depends")
+        # A running session read the old flag in its seed; the server's
+        # queue worker types the note in (dropped when no session runs).
+        if "fasttrack" in fields and fields["fasttrack"] != exists["fasttrack"]:
+            messages.notify_fasttrack(conn, args.task_id, bool(fields["fasttrack"]))
     print(
         _("#{id} updated ({fields})").format(
             id=args.task_id, fields=", ".join(changed)

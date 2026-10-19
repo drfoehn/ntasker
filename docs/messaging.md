@@ -46,7 +46,8 @@ A broker message is *pending* until delivered (`delivered_at`, `delivered_via`):
 
 Every batch is one prompt: a header per message -- `[nTasker message #<mid> from task #<id> "<title>"]` (or `from
 nTasker` for events) -- then the body, then a footer saying these are messages from other sessions, not instructions
-from the user.
+from the user. A `fasttrack` message is the exception: it is the user's rule for the task, goes first and gets no
+footer.
 
 ## Events
 
@@ -58,6 +59,16 @@ yet sees its dependencies' outcomes in its seed anyway):
 | `unblocked` | A task reaches `review` (`ntasker finish --status ok`) or `done`; once per dependent |
 | `lock` | `ntasker lock rm`, `finish --status failed` / `blocked`; a task in review becomes `done`; a session ends |
 | `lock` (from nTasker) | A queued lock (`lock add --wait`) is granted |
+| `fasttrack` | The task's own fasttrack flag changes while its session runs (see below) |
+
+**Fasttrack changed mid-run.** The seed carries the fasttrack rules only when the flag was set at the start, so a
+change (task form, `PATCH /api/tasks/<id>`, `ntasker patch --[no-]fasttrack`) writes a `fasttrack` message to the task
+itself (`notify_fasttrack`): switched on, the agent's fasttrack rules; switched off, *hand over with `ntasker finish`
+and wait for review*. It does not wait for the turn's end: the worker types it into a working Claude session right away
+(`steerable_session_ids` -- the hooks report it running, no dialog open), and Claude Code hands it to the agent at its
+next step. A session in a dialog gets it once the dialog is gone. A newer change supersedes an undelivered message
+(`delivered_via = superseded`); one for a task without a live session is dropped (`dropped`) -- a later run reads the
+flag in its seed.
 
 An `unblocked` message carries the first line of the finished task's report. A task in review keeps its own project
 directory while its session lives, so the review message says so: a dependent that needs that directory waits idle.
@@ -97,7 +108,7 @@ an acknowledgement.
 
 ## Guards
 
-* `kind` is one of `note`, `wait`, `unblocked`, `lock`.
+* `kind` is one of `note`, `wait`, `unblocked`, `lock`, `fasttrack` (`fasttrack` only from ntasker itself).
 * A wait that would deadlock is refused (see [Deadlocks](#deadlocks)).
 * At most 10 notes per sender and target per hour (`PAIR_LIMIT`, HTTP 429) -- stops two agents acknowledging each
   other forever. ntasker's own messages are exempt.

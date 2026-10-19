@@ -302,3 +302,50 @@ def test_conversation_marks_agent_messages():
     assert woken["peer"] == {"name": "other-7", "via": "claude"} and woken["prompt"] == "ack"
     assert brokered["peer"] == {"name": 'task #2 "B"', "via": "ntasker"}
     assert brokered["prompt"] == "I am done"
+
+
+def test_fasttrack_change_goes_into_a_working_session_at_once(env, monkeypatch):
+    a = _add("A")
+    busy = _spawned(a)
+    busy.hook_waiting = False   # mid-turn, by its hooks' word
+    written: list[bytes] = []
+
+    async def fake_write(sess, data):
+        written.append(data)
+
+    monkeypatch.setattr(claude_runner, "_write_pty", fake_write)
+    env.patch(f"/api/tasks/{a}", json={"fasttrack": True})
+    env.patch(f"/api/tasks/{a}", json={"fasttrack": True})   # unchanged: no second note
+    asyncio.run(messages.deliver())
+    paste = written[0].decode()
+    assert "from nTasker]" in paste and f"ntasker finish {a} --status ok" in paste
+    assert messages.FOOTER not in paste
+    assert [r["delivered_via"] for r in _rows(a)] == ["pty"]
+    assert busy.hook_waiting is False   # still working -- not marked busy anew
+
+    env.patch(f"/api/tasks/{a}", json={"fasttrack": False})
+    asyncio.run(messages.deliver())
+    assert "removed the fasttrack flag" in written[2].decode()
+
+
+def test_fasttrack_note_waits_out_a_dialog_and_skips_dead_tasks(env, monkeypatch):
+    a, b = _add("A"), _add("B")
+    asking = _spawned(a)
+    asking.hook_waiting = True   # a permission dialog: typing would answer it
+    monkeypatch.setattr(claude_runner, "_write_pty", lambda sess, data: pytest.fail("typed into a dialog"))
+    env.patch(f"/api/tasks/{a}", json={"fasttrack": True})
+    env.patch(f"/api/tasks/{a}", json={"fasttrack": False})   # supersedes the first
+    env.patch(f"/api/tasks/{b}", json={"fasttrack": True})    # no session at all
+    asyncio.run(messages.deliver())
+    assert [r["delivered_via"] for r in _rows(a)] == ["superseded", None]
+    assert _rows(b)[0]["delivered_via"] == "dropped"
+
+
+def test_cli_fasttrack_change_queues_the_note(env, capsys):
+    from ntasker import db
+
+    a = _add("A")
+    argv = ["--db", str(db.DB_PATH), "patch", str(a), "--fasttrack"]
+    assert cli.main(argv) == 0
+    assert cli.main(argv) == 0
+    assert [r["kind"] for r in _rows(a)] == ["fasttrack"]

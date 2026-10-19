@@ -7,7 +7,8 @@
 {# app; the answered ones stay in the turn as decision blocks), and whatever #}
 {# stops the agent (usage limit, login, network) shows as a card. Esc or the #}
 {# Interrupt button stops a running turn, like Esc in the terminal. Replies #}
-{# sent while the agent works queue above the reply box. The task's #}
+{# sent while the agent works go in at its next step; those it cannot take #}
+{# yet (a dialog is open) queue above the reply box. The task's #}
 {# report sits in the pane beside it (see index.html). The reply box takes #}
 {# the focus when the pane opens and after every button in it. #}
 <div class="claude-conv-page card flex-fill d-flex flex-column" @keydown.escape.window="onConvEscape($event)"
@@ -341,8 +342,8 @@
               @submit.prevent="sendConvReply()"
               @dragover.prevent="convDragOver = true" @dragleave.self="convDragOver = false"
               @drop.prevent="onConvDrop($event)">
-            {# Replies sent while the agent works wait here, one goes in per finished #}
-            {# turn; "Send now" hands one over mid-turn (see sendConvReply). #}
+            {# Replies the agent cannot take yet wait here, and go in once it can #}
+            {# (see _flushConvQueues); "Send now" hands one over mid-turn. #}
             <template x-if="convQueueActive.length">
                 <div class="conv-queue mb-2">
                     <div class="text-secondary small mb-1"><i class="ti ti-clock-pause me-1"></i><span x-text="$i18n('conv_queue_title')"></span></div>

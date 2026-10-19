@@ -431,8 +431,11 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // blocked on a prompt -- drives the "waiting for input" highlight.
         claudeWaiting: [],
         // Subset of claudeWaiting whose turn is over (an empty prompt, not a
-        // dialog) -- only those get the next queued reply.
+        // dialog) -- they get the next queued reply, "fresh context" ones too.
         claudeIdle: [],
+        // Working sessions that take a reply mid-turn (Claude Code hands it to
+        // the agent at its next step) -- they get queued replies at once.
+        claudeSteerable: [],
         // Task ids worked on by a session ntasker did not start (`/task` in a
         // terminal). No tab, no PTY -- the card is locked until it ends.
         claudeExternal: [],
@@ -3732,6 +3735,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                     this.claudeWaiting = d.waiting || [];
                     this.claudeQuestions = d.questions || {};
                     this.claudeIdle = d.idle || [];
+                    this.claudeSteerable = d.steerable || [];
                     this.claudeExternal = d.external || [];
                     this.claudeSessionProjects = d.projects || {};
                     this.claudeSessionTitles = d.titles || {};
@@ -4774,7 +4778,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             if (!text && !images.length) return;
             const id = this.claudeView;
             const queue = this.convQueue[id] || [];
-            if (queue.some(e => !e.sent) || !this.claudeIdle.includes(id)) {
+            if (queue.some(e => !e.sent) || !this._takesReply(id, fresh)) {
                 this.convQueue[id] = [...queue, { key: ++_convQueueSeq, text, images, fresh, sent: false }];
                 this.convReply = '';
                 this.convImages = [];   // the entry owns the object URLs now
@@ -4819,24 +4823,36 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             return this.convQueue[this.claudeView] || [];
         },
 
-        // Send the next queued reply of every session whose turn is over --
-        // one per turn, the rest wait for the next. Runs on each session poll
-        // that changed something.
+        // Whether a session takes a reply now: at the end of its turn, or
+        // mid-turn while it works (not in a dialog the text would answer).
+        // A "fresh context" reply types a /clear first -- only between turns.
+        _takesReply(id, fresh) {
+            return this.claudeIdle.includes(id) || (!fresh && this.claudeSteerable.includes(id));
+        },
+
+        // Send the next queued reply of every session that takes one: a
+        // working one gets it at once (it reaches the agent at its next
+        // step), an idle one gets one per turn, the rest wait for the next.
+        // A handed-over entry stays listed until the conversation shows it.
+        // Runs on each session poll that changed something.
         _flushConvQueues() {
             const now = Date.now();
-            for (const id of this.claudeIdle) {
+            for (const id of new Set([...this.claudeIdle, ...this.claudeSteerable])) {
                 if (!this.convQueue[id]?.length) continue;
+                const idle = this.claudeIdle.includes(id);
                 // Handed over, yet the turn ended: it went in, whatever the
                 // transcript shows.
-                const queue = (this.convQueue[id] || []).filter(e => !e.sent);
-                this.convQueue[id] = queue;
-                if (!queue.length || now - (this._convQueueSentAt[id] || 0) < QUEUE_RESEND_MS) continue;
-                this._convQueueSentAt[id] = now;
-                const [next, ...rest] = queue;
-                this.convQueue[id] = rest;
+                if (idle) this.convQueue[id] = this.convQueue[id].filter(e => !e.sent);
+                const next = this.convQueue[id].find(e => !e.sent);
+                if (!next || !this._takesReply(id, next.fresh)) continue;
+                if (idle) {
+                    if (now - (this._convQueueSentAt[id] || 0) < QUEUE_RESEND_MS) continue;
+                    this._convQueueSentAt[id] = now;
+                }
+                next.sent = true;
                 this._sendReply(id, next).then(ok => {
                     if (ok) this._revokeImages(next.images);
-                    else this.convQueue[id] = [next, ...(this.convQueue[id] || [])];
+                    else next.sent = false;
                 });
             }
         },

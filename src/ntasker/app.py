@@ -58,6 +58,7 @@ from ntasker.claude_runner import (
     session_states,
     set_hook_state,
     set_question,
+    steerable_session_ids,
     start_detached_session,
     stop_session,
     terminal_available,
@@ -685,7 +686,7 @@ def build_js_strings() -> dict[str, str]:
         "conv_send_fresh": _("Send using fresh context"),
         "conv_send_fresh_hint": _("Clear the conversation context first, then send the message into the fresh one"),
         "conv_image_remove": _("Remove image"),
-        "conv_queue_title": _("Waiting -- goes in once the agent is done"),
+        "conv_queue_title": _("Waiting -- goes in as soon as the agent can take it"),
         "conv_queue_now": _("Send now"),
         "conv_queue_now_hint": _("Hand it to the agent right away -- it takes it in at its next step"),
         "conv_queue_sent": _("Handed over"),
@@ -1813,8 +1814,10 @@ def api_claude_sessions() -> JSONResponse:
     ``questions``: the question each waiting session asks right now (id ->
     ``{id, questions}``, see :func:`api_claude_session_question`) -- the
     conversation pane's question card. ``idle``: the waiting sessions whose turn
-    is over (see :func:`ntasker.claude_runner.idle_session_ids`) -- the run
-    view sends its queued prompts only to those.
+    is over (see :func:`ntasker.claude_runner.idle_session_ids`).
+    ``steerable``: the working sessions that take a prompt mid-turn (see
+    :func:`ntasker.claude_runner.steerable_session_ids`). The run view hands
+    its queued replies to both; a "fresh context" reply waits for ``idle``.
     """
     states = session_states()
     active = list(states.keys())
@@ -1854,6 +1857,7 @@ def api_claude_sessions() -> JSONResponse:
             "activity": activity,
             "questions": open_questions(),
             "idle": idle_session_ids(states),
+            "steerable": steerable_session_ids(),
         }
     )
 
@@ -3732,6 +3736,7 @@ def api_update_task(task_id: int, payload: TaskUpdate) -> JSONResponse:
             fields["queue_order"] = None
             fields["session_ended_at"] = None
 
+        was = conn.execute("SELECT fasttrack FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if fields:
             set_clause = ", ".join(f"{k} = ?" for k in fields)
             params = [*fields.values(), task_id]
@@ -3756,6 +3761,9 @@ def api_update_task(task_id: int, payload: TaskUpdate) -> JSONResponse:
 
         if fields.get("status") == "done" or fields.get("phase") == "review":
             messages.notify_finished(conn, task_id, "done" if fields.get("status") == "done" else "review")
+        # A running session read the old flag in its seed -- tell it at once.
+        if "fasttrack" in fields and was is not None and fields["fasttrack"] != was["fasttrack"]:
+            messages.notify_fasttrack(conn, task_id, bool(fields["fasttrack"]))
 
         row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         tags = load_tags_for(conn, task_id)

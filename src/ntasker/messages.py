@@ -22,7 +22,9 @@ ntasker writes messages of its own on events: a task that others depend on
 reaches ``review`` / ``done`` (:func:`notify_finished` -- ``done`` also frees
 its own project directory), or releases a directory lock (:func:`notify_lock_released`). Only *live* dependents are
 told -- a task that has not started yet sees its dependencies' results in its
-seed anyway.
+seed anyway. A task that gains or loses the fasttrack flag while its session
+runs is told at once, mid-turn (:func:`notify_fasttrack`) -- its seed still
+carries the old rules.
 
 Guards against agents flooding each other: a fixed ``kind`` vocabulary, at
 most :data:`PAIR_LIMIT` notes per sender and target per hour, and the seed's
@@ -43,8 +45,19 @@ from ntasker.db import DepError, _depends_on, set_task_deps, validate_deps
 
 #: ``note``: free text from a session or the CLI. ``wait``: the sender waits
 #: for the target to finish (``ntasker wait-for``). ``unblocked`` / ``lock``:
-#: ntasker's own event messages.
-KINDS = ("note", "wait", "unblocked", "lock")
+#: ntasker's own event messages. ``fasttrack``: the task's fasttrack flag
+#: changed mid-run -- the user's rules for the task, delivered mid-turn.
+KINDS = ("note", "wait", "unblocked", "lock", "fasttrack")
+
+#: Kinds ntasker writes itself -- their header names "nTasker" as sender.
+OWN_KINDS = ("unblocked", "lock", "fasttrack")
+
+#: What a task that lost the fasttrack flag mid-run is told.
+FASTTRACK_OFF = (
+    "The user removed the fasttrack flag from this task. The fasttrack rules in your briefing no longer "
+    "apply: do not commit on your own and do not end the session -- hand over with `ntasker finish {id}` "
+    "as the run rules say and wait for the user's review."
+)
 
 #: Notes one sender may send one target per hour. Two agents answering each
 #: other's acknowledgements would otherwise loop forever.
@@ -220,6 +233,31 @@ def notify_finished(conn: sqlite3.Connection, task_id: int, state: str) -> list[
     return ids
 
 
+def notify_fasttrack(conn: sqlite3.Connection, task_id: int, on: bool) -> int:
+    """Tell ``task_id``'s session that its fasttrack flag changed; returns the message id.
+
+    Switched on, the message carries the agent's fasttrack rules (the seed's
+    section); switched off, :data:`FASTTRACK_OFF`. An earlier undelivered
+    flag message is superseded, so only the latest state goes in. Whether a
+    session runs is up to :func:`deliver` -- the CLI writes this without
+    knowing the server's sessions.
+    """
+    from ntasker.settings import get_fasttrack_rules  # noqa: PLC0415 -- lazy: avoid cycle
+
+    conn.execute(
+        "UPDATE messages SET delivered_at = datetime('now'), delivered_via = 'superseded' "
+        "WHERE to_task = ? AND kind = 'fasttrack' AND delivered_at IS NULL",
+        (task_id,),
+    )
+    if on:
+        row = conn.execute("SELECT agent FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        rules = get_fasttrack_rules(resolve_agent_key(row["agent"] if row else None))
+        body = "The user made this task a fasttrack task while you work on it. From now on:\n\n" + rules
+    else:
+        body = FASTTRACK_OFF
+    return post(conn, task_id, body.replace("{id}", str(task_id)), kind="fasttrack")
+
+
 def _waits_for_grant(conn: sqlite3.Connection, task_id: int, projects: list[str]) -> bool:
     """Whether ``task_id`` queued for one of ``projects`` -- the grant tells it instead."""
     from ntasker import lockqueue  # noqa: PLC0415 -- lazy: lockqueue imports this module
@@ -265,14 +303,22 @@ def mark_delivered(conn: sqlite3.Connection, ids: list[int], via: str) -> None:
 def sender_label(row: sqlite3.Row) -> str:
     """Who a message is from, as its header names it."""
     if row["from_task"] is None:
-        return "nTasker" if row["kind"] in ("unblocked", "lock") else "outside any task"
+        return "nTasker" if row["kind"] in OWN_KINDS else "outside any task"
     return f'task #{row["from_task"]} "{row["from_title"] or ""}"'
 
 
 def render(rows: list[sqlite3.Row]) -> str:
-    """A batch of messages as one prompt: a header line per message, then :data:`FOOTER`."""
-    parts = [f"{HEAD_PREFIX}{r['id']} from {sender_label(r)}]\n{r['body']}" for r in rows]
-    return "\n\n".join([*parts, FOOTER])
+    """A batch of messages as one prompt: a header line per message.
+
+    Fasttrack messages come first: they are the user's rules for the task.
+    The peer messages after them end with :data:`FOOTER`.
+    """
+    def part(r: sqlite3.Row) -> str:
+        return f"{HEAD_PREFIX}{r['id']} from {sender_label(r)}]\n{r['body']}"
+
+    own = [part(r) for r in rows if r["kind"] == "fasttrack"]
+    peer = [part(r) for r in rows if r["kind"] != "fasttrack"]
+    return "\n\n".join([*own, *peer, *([FOOTER] if peer else [])])
 
 
 def as_dict(row: sqlite3.Row) -> dict:
@@ -309,21 +355,36 @@ async def deliver() -> None:
 
     One batch per session per call. The session is marked busy right away, so
     the next call cannot type into it again before its own hooks report back.
+    A fasttrack message does not wait for the turn's end: it goes into a
+    working session at once (:func:`ntasker.claude_runner.steerable_session_ids`),
+    and one for a task without a live session is dropped -- a session started
+    later reads the flag in its seed.
     """
     from ntasker.db import get_conn  # noqa: PLC0415 -- lazy: tests rebind the DB
 
-    idle = claude_runner.idle_session_ids(claude_runner.session_states())
-    if not idle:
-        return
+    idle = set(claude_runner.idle_session_ids(claude_runner.session_states()))
+    steerable = set(claude_runner.steerable_session_ids())
+    live = live_task_ids()
     with get_conn() as conn:
-        batches = {tid: rows for tid in idle if (rows := pending(conn, tid))}
+        stale = conn.execute(
+            "SELECT id, to_task FROM messages WHERE kind = 'fasttrack' AND delivered_at IS NULL"
+        ).fetchall()
+        mark_delivered(conn, [r["id"] for r in stale if r["to_task"] not in live], "dropped")
+        batches = {}
+        for tid in idle | steerable:
+            rows = pending(conn, tid)
+            if tid not in idle:
+                rows = [r for r in rows if r["kind"] == "fasttrack"]
+            if rows:
+                batches[tid] = rows
     for tid, rows in batches.items():
         sess = claude_runner.SESSIONS.get(tid)
         if sess is None or not sess.alive:
             continue
-        sess.turn_over = False
-        if sess.hook_waiting is not None:
-            sess.hook_waiting = False
+        if tid in idle:
+            sess.turn_over = False
+            if sess.hook_waiting is not None:
+                sess.hook_waiting = False
         sess.last_output = time.monotonic()
         # Bracketed paste keeps the newlines in the input line; the Enter goes
         # out on its own, like the run view's quick prompts.

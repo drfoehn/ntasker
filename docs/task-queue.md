@@ -230,6 +230,9 @@ the next tick.
 
 *Continue on failure* is the second checkbox (`tasks.fail_continue`, `--fail-continue`), shown only with fasttrack on.
 
+Switching the flag while the task runs tells its session at once, mid-turn -- see
+[messaging](messaging.md#events) (`fasttrack` messages).
+
 ### The run log
 
 Every fasttrack run leaves one row in `run_outcomes` -- also when its session ends **without** `finish` (crash, stop):

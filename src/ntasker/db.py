@@ -241,11 +241,11 @@ CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_task INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
     to_task INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    kind TEXT NOT NULL,                          -- note | wait | unblocked | lock
+    kind TEXT NOT NULL,                          -- note | wait | unblocked | lock | fasttrack
     body TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     delivered_at TEXT,
-    delivered_via TEXT                           -- pty | hook | inbox
+    delivered_via TEXT                           -- pty | hook | inbox | superseded | dropped
 );
 CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_task, delivered_at);
 
