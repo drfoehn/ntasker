@@ -458,8 +458,10 @@ def start_install(name: str) -> dict[str, Any]:
 
 
 def _run_install(cmd: list[str]) -> None:
+    from ntasker import service  # noqa: PLC0415
+
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)  # noqa: S603 -- auto-detected installer
+        proc = subprocess.run(service.runnable(cmd), capture_output=True, text=True)  # noqa: S603 -- auto-detected installer
         state, output = ("done" if proc.returncode == 0 else "failed"), proc.stderr or proc.stdout
     except OSError as exc:
         state, output = "failed", str(exc)
