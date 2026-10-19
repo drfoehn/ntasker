@@ -1181,7 +1181,7 @@ def _set_plugin_enabled(name: str, enabled: bool) -> int:
             print(_("nTasker: installing {pkgs} -- `{cmd}`").format(
                 pkgs=", ".join(missing), cmd=" ".join(cmd)
             ))
-            rc = subprocess.run(cmd).returncode  # noqa: S603 -- auto-detected installer
+            rc = subprocess.run(service.runnable(cmd)).returncode  # noqa: S603 -- auto-detected installer
             if rc != 0:
                 print(_("nTasker: install failed (exit {rc})").format(rc=rc), file=sys.stderr)
                 return rc
@@ -2519,7 +2519,7 @@ def cmd_self_update(args: argparse.Namespace) -> int:
         if checkout:
             print(_("nTasker: editable install -- reinstalling from {checkout}.").format(checkout=checkout))
     print(_("nTasker: running `{cmd}`").format(cmd=" ".join(cmd)))
-    proc = subprocess.run(cmd)  # noqa: S603 -- user-configured / auto-detected
+    proc = subprocess.run(service.runnable(cmd))  # noqa: S603 -- user-configured / auto-detected
     if proc.returncode != 0:
         print(_("nTasker: update command failed (exit {rc})").format(rc=proc.returncode))
         return proc.returncode

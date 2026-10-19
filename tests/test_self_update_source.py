@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from ntasker import service
@@ -68,5 +70,6 @@ def test_cli_names_the_local_source(uv_tool, monkeypatch, capsys, tmp_path):
     )
     monkeypatch.setattr(service, "restart_service", lambda: False)
     assert main(["--db", str(tmp_path / "none.db"), "self-update"]) == 0
-    assert ran[0] == ["uv", "tool", "install", "--upgrade", "ntasker"]
+    assert os.path.basename(ran[0][0]) == "uv"
+    assert ran[0][1:] == ["tool", "install", "--upgrade", "ntasker"]
     assert "/Users/x/ntasker-ui" in capsys.readouterr().out
