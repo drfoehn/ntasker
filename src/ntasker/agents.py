@@ -193,7 +193,8 @@ class AgentSpec:
         resolved binary (a configured override, else the bare name on PATH).
 
         ``resume_id`` reopens a stored session (:attr:`resume_flag`) -- the
-        conversation is already there, so the ``seed`` is ignored. Otherwise
+        conversation is already there; a ``seed`` is sent as its next prompt
+        (the usage-limit resume, see :mod:`ntasker.usagelimit`). Otherwise
         ``session_id`` forces a fresh session's id (:attr:`session_flag`) so
         ntasker can persist it and resume the run later. ``system_prompt`` is
         appended to the agent's system prompt (:attr:`system_prompt_flag`) --
@@ -212,11 +213,11 @@ class AgentSpec:
             args.extend([self.settings_flag, settings_path])
         if resume_id and self.resume_flag:
             args.extend([self.resume_flag, resume_id])
-            return args  # resuming replays the conversation -- no seed
-        if session_id and self.session_flag:
-            args.extend([self.session_flag, session_id])
-        if system_prompt and self.system_prompt_flag:
-            args.extend([self.system_prompt_flag, system_prompt])
+        else:
+            if session_id and self.session_flag:
+                args.extend([self.session_flag, session_id])
+            if system_prompt and self.system_prompt_flag:
+                args.extend([self.system_prompt_flag, system_prompt])
         if seed:
             if self.seed_mode == "prompt-flag":
                 args.extend(["--prompt", seed])

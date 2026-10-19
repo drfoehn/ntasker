@@ -33,6 +33,11 @@ A server restart kills every session; the worker flags the running ones on
 shutdown and resumes every flagged, resumable entry on its first tick, so the
 runs pick up where they were instead of starting over.
 
+A run a Claude **usage limit** stopped is neither: it is *paused*
+(``tasks.limit_until``, see :mod:`ntasker.usagelimit`). It keeps its entry
+and its lane, gets no run-log row, is not resumed early after a restart, and
+:func:`resume_paused` continues it once the limit has reset.
+
 A queued run gets its own seed (:func:`~ntasker.claude_runner.queue_seed_for_task`)
 which tells the agent to hand the finished task to ``phase=review`` unprompted
 and leave the session open. Closing stays the user's call unless the task
@@ -83,17 +88,18 @@ import asyncio
 import contextlib
 import sqlite3
 import sys
+import time
 from datetime import datetime
 
-from ntasker import lockqueue, locks, messages, worktrees
+from ntasker import lockqueue, locks, messages, usagelimit, worktrees
 from ntasker.agents import agent_keys, get_spec, resolve_agent_key
 from ntasker.claude_runner import (
     active_session_ids,
+    SESSIONS,
+    _write_pty,
     external_session_ids,
-    limit_hold_until,
     mark_wip,
     queue_seed_for_task,
-    resume_limited,
     start_detached_session,
     stop_session,
     terminal_available,
@@ -131,6 +137,10 @@ LANELESS: set[int] = set()
 # the worker collected the ended entries on its first tick after a restart.
 # Consumed by :func:`tick` on start, which also clears the entry's ended flag.
 RESUME: set[int] = set()
+
+# The subset of :data:`RESUME` a usage limit paused: their resume carries
+# :data:`~ntasker.usagelimit.RESUME_PROMPT`, so the agent goes on by itself.
+LIMIT_RESUME: set[int] = set()
 
 # Task ids the user told to start *now* -- lane, directory locks and the git
 # check are skipped for exactly one tick, after which the set is emptied: an
@@ -368,12 +378,12 @@ def _runnable_agents() -> set[str]:
     override from the settings store, so asking it per queued task would mean a
     fresh DB connection per row, every two seconds, forever.
 
-    Claude is left out while a usage limit is active (see
-    :func:`~ntasker.claude_runner.limit_hold_until`): a new run would only hit
-    it at once and sit parked in its lane.
+    Claude is left out while a usage limit pauses a run (see
+    :func:`~ntasker.usagelimit.hold_until`): a new run would only hit it at
+    once and sit paused in its lane.
     """
     keys = {key for key in agent_keys() if terminal_available(get_spec(key))[0]}
-    if limit_hold_until() is not None:
+    if usagelimit.hold_until() is not None:
         keys.discard("claude")
     return keys
 
@@ -433,16 +443,22 @@ def skipped(rows: list[sqlite3.Row], live: set[int]) -> dict[int, dict]:
     Same rules as the start step: only while ``dir_locks`` is on, only for
     tasks without a live session, and a lock conflict wins over the git check.
     A Claude task waiting for a usage limit to reset (``limit``, with ``until``
-    as ISO time) is named regardless of ``dir_locks``.
+    as ISO time) is named regardless of ``dir_locks`` -- a paused one with its
+    own resume time, the others with the latest pause's.
     """
     from ntasker.settings import get_dir_locks, get_require_clean  # noqa: PLC0415
 
     out: dict[int, dict] = {
+        int(row["id"]): {"reason": "limit", "project": row["project"], "holder": None, "until": row["limit_until"]}
+        for row in rows
+        if row["limit_until"] and int(row["id"]) not in live
+    }
+    out.update({
         int(row["id"]): {"reason": "ended", "project": row["project"], "holder": None}
         for row in rows
-        if row["session_ended_at"] and int(row["id"]) not in live and int(row["id"]) not in RESUME
-    }
-    hold = limit_hold_until()
+        if row["session_ended_at"] and int(row["id"]) not in live | RESUME | set(out)
+    })
+    hold = usagelimit.hold_until()
     if hold is not None:
         until = datetime.fromtimestamp(hold).astimezone().isoformat()
         default_agent = resolve_agent_key(None)
@@ -581,12 +597,16 @@ def tick() -> None:
         # run-log row -- once per run (``session_ended_at`` is still NULL the
         # first time round). Git runs before the write connection opens. With
         # ``fail_continue`` the entry leaves the queue instead of blocking.
+        # A run a usage limit paused is no failure: no run-log row, and it
+        # keeps its queue entry to be resumed (see ntasker.usagelimit).
         logged = [
             (r, changed_paths(parse_baselines(r["run_baselines"])))
             for r in ended_rows
-            if r["fasttrack"] and r["session_ended_at"] is None
+            if r["fasttrack"] and r["session_ended_at"] is None and not r["limit_until"]
         ]
-        skipped = [int(r["id"]) for r in ended_rows if r["fasttrack"] and r["fail_continue"]]
+        skipped = [
+            int(r["id"]) for r in ended_rows if r["fasttrack"] and r["fail_continue"] and not r["limit_until"]
+        ]
         with get_conn() as conn:
             for r, paths in logged:
                 insert_outcome(conn, r, "ended", ENDED_SUMMARY, report=r["report"], files=paths)
@@ -603,11 +623,15 @@ def tick() -> None:
     # After a restart every session is gone: resume the entries flagged ended
     # (by the previous process on shutdown, or by its last tick) rather than
     # starting them over. Once, on the first tick -- a session the user stopped
-    # on purpose later must not come back on its own.
+    # on purpose later must not come back on its own. A run a usage limit
+    # paused waits for its reset instead (see :func:`resume_paused`).
     if not _booted:
         _booted = True
-        RESUME.update(int(r["id"]) for r in rows if r["session_ended_at"] and resumable(r))
+        RESUME.update(
+            int(r["id"]) for r in rows if r["session_ended_at"] and not r["limit_until"] and resumable(r)
+        )
     RESUME.intersection_update(int(r["id"]) for r in rows)
+    LIMIT_RESUME.intersection_update(RESUME)
 
     forced = set(FORCE)
     FORCE.clear()
@@ -628,11 +652,13 @@ def tick() -> None:
     starts: list[int] = []
     with get_conn() as conn:
         busy = _busy_buckets(occupied, conn)
+        # An ended entry waits for the user (or its resume), a paused one for
+        # its reset -- either keeps its lane.
         busy |= {
             _bucket(r)
             for r in rows
             if _bucket(r)
-            and r["session_ended_at"]
+            and (r["session_ended_at"] or r["limit_until"])
             and int(r["id"]) not in RESUME
             and int(r["id"]) not in LANELESS
         }
@@ -642,7 +668,9 @@ def tick() -> None:
             # A live entry runs, an ended one waits for the user (or its
             # resume) -- for a laned task its busy bucket already says so, a
             # laneless or project-less one needs the explicit guard.
-            if task_id in live | external or (row["session_ended_at"] and task_id not in RESUME):
+            if task_id in live | external or (
+                (row["session_ended_at"] or row["limit_until"]) and task_id not in RESUME
+            ):
                 continue
             laneless = task_id in LANELESS
             # Start now: the user overrides lane, locks and the git check for
@@ -673,13 +701,12 @@ def tick() -> None:
             continue
         quick = task_id in QUICK
         resume = task_id in RESUME
+        if task_id in LIMIT_RESUME:
+            seed = usagelimit.RESUME_PROMPT
+        else:
+            seed = None if (quick or resume) else queue_seed_for_task(task)
         try:
-            started = start_detached_session(
-                task_id,
-                None if (quick or resume) else queue_seed_for_task(task),
-                quick=quick,
-                resume=resume,
-            )
+            started = start_detached_session(task_id, seed, quick=quick, resume=resume)
         except worktrees.WorktreeError as e:
             # No checkout, no run: flag the entry ended like a crashed run, so
             # it waits for the user instead of retrying git every tick.
@@ -687,17 +714,68 @@ def tick() -> None:
             with get_conn() as conn:
                 conn.execute("UPDATE tasks SET session_ended_at = ? WHERE id = ?", (_now(), task_id))
             RESUME.discard(task_id)
+            LIMIT_RESUME.discard(task_id)
             continue
         if started:
             QUICK.discard(task_id)
             if resume:
                 RESUME.discard(task_id)
+                LIMIT_RESUME.discard(task_id)
                 clear_ended([task_id])
             else:
                 # The loader's "starting work marks it in progress" move. A
                 # resume keeps the phase -- the conversation continues as is.
                 mark_wip(task_id)
             _running.add(task_id)
+
+
+async def resume_paused() -> list[int]:
+    """Resume every run a usage limit paused whose moment has come; returns their task ids.
+
+    In queue order. First the usage windows are asked once more (see
+    :func:`~ntasker.usagelimit.still_limited`): one still at 100 % moves every
+    due pause to its reset instead. Then, per task:
+
+    * a live spawned session gets :data:`~ntasker.usagelimit.RESUME_PROMPT`
+      typed in;
+    * a live external session (``/task`` in a terminal) has no terminal
+      nTasker can type into: the prompt goes in as a message, handed over on
+      the session's next hook;
+    * an ended, queued, resumable run (server restart, closed terminal) is
+      reopened with ``claude --resume`` and the prompt, by :func:`tick` --
+      lane and lock rules apply as to any start.
+
+    Anything else (removed from the queue, nothing to resume) just stops being
+    paused; an ended entry then waits for the user as usual.
+    """
+    rows = usagelimit.due()
+    if not rows:
+        return []
+    later = usagelimit.still_limited()
+    if later is not None:
+        for row in rows:
+            usagelimit.park(int(row["id"]), later)
+        return []
+    live = set(active_session_ids())
+    external = set(external_session_ids())
+    for row in rows:
+        task_id = int(row["id"])
+        usagelimit.clear(task_id)
+        if task_id in live:
+            sess = SESSIONS[task_id]
+            sess.hook_waiting = False
+            sess.turn_over = False
+            sess.last_output = time.monotonic()
+            await _write_pty(sess, usagelimit.RESUME_PROMPT.encode())
+            await asyncio.sleep(0.05)
+            await _write_pty(sess, b"\r")
+        elif task_id in external:
+            with get_conn() as conn:
+                messages.post(conn, task_id, usagelimit.RESUME_PROMPT)
+        elif row["queue_order"] is not None and resumable(row):
+            RESUME.add(task_id)
+            LIMIT_RESUME.add(task_id)
+    return [int(r["id"]) for r in rows]
 
 
 def _now() -> str:
@@ -721,6 +799,6 @@ async def worker() -> None:
         # Pending agent-to-agent messages go into sessions whose turn is over.
         with contextlib.suppress(Exception):
             await messages.deliver()
-        # Sessions a usage limit stopped go on once it has reset.
+        # Runs a usage limit paused go on once it has reset.
         with contextlib.suppress(Exception):
-            await resume_limited()
+            await resume_paused()

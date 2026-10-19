@@ -1628,6 +1628,11 @@ def cmd_finish(args: argparse.Namespace) -> int:
     if status >= 400:
         print(_("nTasker: {detail}").format(detail=data.get("detail", status)), file=sys.stderr)
         return 1
+    if args.status != "ok" and data.get("limit_until"):
+        # The server took the usage limit for what it is: a pause, not a blocker.
+        print(_("#{id} paused by the usage limit -- nTasker resumes this session at {at}. Stop now.").format(
+            id=args.task_id, at=data["limit_until"]))
+        return 0
     print(_("#{id} finished: {status}").format(id=args.task_id, status=args.status))
     return 0
 
@@ -1878,7 +1883,7 @@ def cmd_hook_limit(args: argparse.Namespace) -> int:
     """``StopFailure`` with ``rate_limit``: a usage limit ended the turn.
 
     Fires instead of ``Stop``. The server parks the session and resumes it
-    once the limit has reset (see :func:`ntasker.claude_runner.set_limited`).
+    once the limit has reset (see :mod:`ntasker.usagelimit`).
     A subagent's failure says nothing about the main session.
     """
     ctx = _hook_context()

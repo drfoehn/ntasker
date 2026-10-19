@@ -104,6 +104,9 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- queued task's session ended before the task was done -- the entry stays
     -- queued, flagged, until the user acts. Never user-facing.
     session_ended_at TEXT,
+    -- Paused by a Claude usage limit: when nTasker resumes the run (ISO with
+    -- offset). NULL = not paused. See ntasker.usagelimit.
+    limit_until TEXT,
     -- The Diff view's baselines (see ntasker.rundiff): JSON {directory: sha}
     -- for every directory the task's last fresh run holds (its own plus its
     -- locks), recorded at spawn. A resume keeps them, so the diff spans the
@@ -164,7 +167,7 @@ CREATE TABLE IF NOT EXISTS run_outcomes (
     task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
     title TEXT NOT NULL,
     project TEXT,
-    status TEXT NOT NULL,                       -- ok | failed | blocked | ended
+    status TEXT NOT NULL,                       -- ok | failed | blocked | ended | limit
     summary TEXT NOT NULL DEFAULT '',
     report TEXT,
     commit_sha TEXT,
@@ -391,6 +394,11 @@ def init_db(path: Path | None = None) -> None:
             conn.execute("ALTER TABLE tasks ADD COLUMN triage TEXT")
         except sqlite3.OperationalError:
             pass
+        # Usage-limit pause (see the schema comment).
+        try:
+            conn.execute("ALTER TABLE tasks ADD COLUMN limit_until TEXT")
+        except sqlite3.OperationalError:
+            pass
         # v3.12: accept-after-re-triage on inbox follow-ups.
         try:
             conn.execute("ALTER TABLE inbox ADD COLUMN accept TEXT")
@@ -608,6 +616,7 @@ def row_to_task(
 
         "model": row["model"],
         "session_id": row["session_id"],
+        "limit_until": row["limit_until"],
         "session_cwd": row["session_cwd"],
         "sort_order": row["sort_order"],
         "queue_order": row["queue_order"],
@@ -625,7 +634,7 @@ def row_to_task(
 # Run outcomes (fasttrack run log)
 # ---------------------------------------------------------------------------
 
-OUTCOME_STATUSES = ("ok", "failed", "blocked", "ended")
+OUTCOME_STATUSES = ("ok", "failed", "blocked", "ended", "limit")
 
 
 def insert_outcome(

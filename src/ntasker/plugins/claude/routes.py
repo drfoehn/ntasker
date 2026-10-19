@@ -13,7 +13,8 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from ntasker import claude_runner
+from ntasker import claude_runner, usagelimit
+from ntasker.db import get_conn
 from ntasker.i18n import _
 from ntasker.plugins.claude import usage
 
@@ -32,16 +33,21 @@ def get_usage(fresh: bool = False) -> JSONResponse:
 
 @router.post("/api/claude/sessions/{task_id}/limit")
 def post_limit(task_id: int) -> JSONResponse:
-    """A usage limit ended the session's turn: park it until the limit resets.
+    """A usage limit ended the session's turn: pause the run until the limit resets.
 
     Called by ``ntasker hook limit`` (``StopFailure`` with ``rate_limit``).
-    The reset time comes from the subscription's usage windows
-    (:func:`usage.limit_reset`); the queue worker resumes the session then
-    (:func:`ntasker.claude_runner.resume_limited`). Answers ``{"resume_at":
-    ISO | null}`` -- ``null`` when no reset time is known (no auto-resume).
-    404 when the task has no live session.
+    The reset time comes from the subscription's usage windows, else from the
+    limit message in the transcript (:func:`ntasker.usagelimit.reset_time`);
+    the queue worker resumes the run then
+    (:func:`ntasker.taskqueue.resume_paused`). Answers ``{"resume_at": ISO}``
+    -- with no known reset, the moment nTasker looks again. 404 when the task
+    has no live session.
     """
-    if not claude_runner.set_limited(task_id, usage.limit_reset()):
+    if task_id not in claude_runner.active_session_ids():
         raise HTTPException(status_code=404, detail=_("No live session for this task"))
-    at = claude_runner.limit_resume_at(task_id)
-    return JSONResponse({"resume_at": datetime.fromtimestamp(at).astimezone().isoformat() if at else None})
+    with get_conn() as conn:
+        row = conn.execute("SELECT session_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    limit = usagelimit.detect(row["session_id"]) if row else None
+    reason = (limit or {}).get("text", "")
+    at = usagelimit.park(task_id, usagelimit.reset_time(reason), reason)
+    return JSONResponse({"resume_at": datetime.fromtimestamp(at).astimezone().isoformat()})

@@ -633,3 +633,49 @@ def last_activity(home: Path, session_id: str | None) -> dict | None:
                 first = next(ln for ln in block["text"].strip().splitlines() if ln.strip())
                 return {"text": _one_line(first.lstrip("#").strip())}
     return None
+
+
+def limit_stop(home: Path, session_id: str | None) -> dict | None:
+    """Whether a usage limit stopped the session's work: ``{"text", "at"}``, else ``None``.
+
+    Claude Code says so in two ways, both structured. Near the limit it adds
+    a note flagged ``usageLimitNote: "wrap_up"`` -- the agent gets a short
+    grace allowance to wrap up, and its turn then ends like any other; the
+    note stays in force until a ``"release"`` note follows (the limit has
+    reset and the user went on). A turn cut off by the limit leaves an API
+    error event (``isApiErrorMessage``, ``error: rate_limit``) whose text names
+    the reset ("... resets 3pm"); a later regular reply means it recovered.
+    Reads the whole file, but parses only the few lines that can matter.
+    """
+    path = find_transcript(home, session_id or "")
+    if path is None:
+        return None
+    wrap_up: dict | None = None
+    api_error: dict | None = None
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for raw in fh:
+                if '"usageLimitNote"' not in raw and '"assistant"' not in raw:
+                    continue
+                try:
+                    ev = json.loads(raw)
+                except ValueError:
+                    continue
+                if not isinstance(ev, dict) or ev.get("isSidechain"):
+                    continue
+                note = ev.get("usageLimitNote")
+                if note == "wrap_up":
+                    wrap_up = {"text": "", "at": ev.get("timestamp")}
+                elif note == "release":
+                    wrap_up = api_error = None
+                elif ev.get("type") == "assistant":
+                    content = (ev.get("message") or {}).get("content")
+                    if ev.get("isApiErrorMessage") and ev.get("error") == "rate_limit":
+                        api_error = _blocker(ev, content if isinstance(content, list) else [])
+                    elif not ev.get("isApiErrorMessage"):
+                        api_error = None
+    except OSError:
+        return None
+    if api_error is not None:
+        return {"text": api_error["text"], "at": api_error["at"]}
+    return wrap_up

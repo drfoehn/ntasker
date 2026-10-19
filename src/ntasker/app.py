@@ -51,7 +51,6 @@ from ntasker.claude_runner import (
     bind_session,
     external_session_ids,
     idle_session_ids,
-    limit_resume_at,
     open_questions,
     planner_seed,
     projects_base_dir,
@@ -71,7 +70,7 @@ from ntasker.projects import (
 )
 from ntasker.rundiff import changed_paths, parse_baselines, run_diff
 from ntasker.transcript import conversation_for, last_activity, question_entries
-from ntasker import completion, lockqueue, locks, messages, plugins, sessions, taskqueue, triage, worktrees
+from ntasker import completion, lockqueue, locks, messages, plugins, sessions, taskqueue, triage, usagelimit, worktrees
 from ntasker.newproject import created_projects
 from ntasker.newproject import router as newproject_router
 from ntasker import db as _db_module
@@ -584,6 +583,8 @@ def build_js_strings() -> dict[str, str]:
         "draft_no_run": _("Draft -- never started. Untick Draft to run it."),
         "draft_badge": _("Draft: never started by anyone"),
         "fasttrack_badge": _("Fasttrack: the agent commits and finishes the task itself"),
+        "limit_badge": _("Paused until"),
+        "limit_badge_hint": _("A usage limit stopped the session -- nTasker continues it once the limit has reset"),
         "fail_continue_hint": _("A failed fasttrack run leaves the queue instead of blocking it"),
         "fasttrack_on": _("Mark as fasttrack"),
         "fasttrack_off": _("Remove fasttrack"),
@@ -621,6 +622,7 @@ def build_js_strings() -> dict[str, str]:
         "outcome_status_failed": _("Failed"),
         "outcome_status_blocked": _("Blocked"),
         "outcome_status_ended": _("Session ended without a result"),
+        "outcome_status_limit": _("Paused by the usage limit -- continues after the reset"),
         "outcome_create_task": _("Create a task from this suggestion"),
         "outcome_followup_of": _("Follow-up of #{id} {title}"),
         # Inbox (see ntasker.triage)
@@ -2028,9 +2030,24 @@ def api_claude_session_state(task_id: int, payload: SessionStateIn) -> JSONRespo
     ``Stop``). Overrides the silence
     heuristic for that session -- see :func:`ntasker.claude_runner.session_states`.
     404 when the task has no live session.
+
+    A turn that ended under a usage limit (the agent wrapped up within its
+    grace allowance) pauses the open task until the reset; a turn that ended
+    without one ends a pause -- the user carried on (see :mod:`ntasker.usagelimit`).
     """
     if not set_hook_state(task_id, payload.waiting, payload.turn_over, payload.socket or None):
         raise HTTPException(status_code=404, detail=_("No live session for this task"))
+    if payload.turn_over:
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT status, phase, session_id, limit_until FROM tasks WHERE id = ?", (task_id,)
+            ).fetchone()
+        if row is not None and row["status"] == "open" and row["phase"] != "review":
+            limit = usagelimit.detect(row["session_id"])
+            if limit is not None:
+                usagelimit.park(task_id, usagelimit.reset_time(limit["text"]), limit["text"])
+            elif row["limit_until"]:
+                usagelimit.clear(task_id)
     return JSONResponse({"ok": True})
 
 
@@ -3510,11 +3527,14 @@ def api_task_conversation(task_id: int) -> JSONResponse:
     # The model the session was spawned with decides the context window size.
     model = row["model"] or get_setting(spec.model_setting_key, env_var=spec.model_env_var)
     conv = conversation_for(resolve_home(spec), row["session_id"], rules, model)
-    # A usage limit the queue worker will resume from: say when.
-    resume_at = limit_resume_at(task_id)
-    if conv.get("blocker") and conv["blocker"]["kind"] == "limit" and resume_at is not None:
+    # A run a usage limit paused: say so, and when it goes on -- also when the
+    # agent wrapped up in time and the transcript holds no error.
+    resume_at = usagelimit.paused_until(task_id)
+    if resume_at is not None:
+        blocker = conv["blocker"] if (conv.get("blocker") or {}).get("kind") == "limit" else {
+            "kind": "limit", "text": "", "at": None}
         at = datetime.fromtimestamp(resume_at).astimezone().isoformat()
-        conv = {**conv, "blocker": {**conv["blocker"], "resume_at": at}}  # parsed transcripts are cached
+        conv = {**conv, "blocker": {**blocker, "resume_at": at}}  # parsed transcripts are cached
     return JSONResponse({"supported": True, **conv, "peer_names": messages.address_names()})
 
 
@@ -3762,7 +3782,12 @@ def api_task_outcome(task_id: int, payload: OutcomeIn) -> JSONResponse:
     * fasttrack, ``ok`` -> ``status=done``, session killed, lane continues;
     * fasttrack, ``failed``/``blocked`` -> with ``fail_continue`` the task leaves
       the queue and its session is killed (lane continues), otherwise it stays
-      as today (session open, entry blocks the lane).
+      as today (session open, entry blocks the lane);
+    * ``failed``/``blocked`` while the transcript shows a usage limit -> no
+      failure: the report is stored, the run is paused until the limit resets
+      (``limit_until`` in the answer) and resumed then; a fasttrack run logs
+      ``limit`` instead of the reported status, the locks stay held (see
+      :mod:`ntasker.usagelimit`).
 
     Every fasttrack run gets a ``run_outcomes`` row (the run log); a plain
     task's ``finish`` writes none. ``files`` defaults to the run's changed paths
@@ -3782,6 +3807,23 @@ def api_task_outcome(task_id: int, payload: OutcomeIn) -> JSONResponse:
     summary = summary[:200]
     next_tasks = [t.strip()[:200] for t in payload.next_tasks if t.strip()]
     # Git runs here -- before a write connection is open.
+    # The agent reported the usage limit as a blocker: pause instead.
+    limit = usagelimit.detect(row["session_id"]) if payload.status != "ok" else None
+    if limit is not None:
+        # The report first, so the run-log row of the pause carries it.
+        if report:
+            fields = report_fields(report)
+            with get_conn() as conn:
+                conn.execute(
+                    f"UPDATE tasks SET {', '.join(f'{k} = ?' for k in fields)} WHERE id = ?",
+                    [*fields.values(), task_id],
+                )
+        usagelimit.park(task_id, usagelimit.reset_time(limit["text"]), limit["text"])
+        with get_conn() as conn:
+            row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            task = row_to_task(row, load_tags_for(conn, task_id), load_deps_for(conn, task_id))
+            plugins.apply_task_hooks(conn, [task])
+        return JSONResponse({**task, "outcome_id": None})
     files = payload.files if payload.files is not None else changed_paths(
         parse_baselines(row["run_baselines"])
     )
@@ -3810,6 +3852,9 @@ def api_task_outcome(task_id: int, payload: OutcomeIn) -> JSONResponse:
     # while the session lives (see ntasker.locks.held_dirs).
     if locks.parse(row["locks"]):
         fields["locks"] = locks.dump([])
+    # A hand-off ends any pause a usage limit set.
+    if row["limit_until"]:
+        fields["limit_until"] = None
     with get_conn() as conn:
         if fields:
             set_clause = ", ".join(f"{k} = ?" for k in fields)

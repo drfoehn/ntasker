@@ -4,6 +4,9 @@ All notable changes to ntasker.
 
 Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
+## [Unreleased]
+Usage limit: nTasker detects it, logs `limit` and pauses the run instead of blocking; resumes all after reset.
+
 ## [3.17.0] — 2026-10-17
 Agent sessions message each other and queue for project locks; interrupt and queue replies in Verlauf.
 

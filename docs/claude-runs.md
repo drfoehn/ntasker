@@ -375,29 +375,54 @@ The server caches the answer for 30 s. A failed refresh serves the last answer.
 
 ## Resuming after a usage limit
 
-When a session ntasker spawned hits a usage limit (5-hour or weekly window), ntasker parks it and tells it to go on
-once the limit has reset -- no terminal output is parsed, both facts come as structured data:
+A usage limit (5-hour or weekly window) is no failure of the task: the work goes on once it has reset. So a run it
+stopped is **paused**, not `blocked` -- `tasks.limit_until` holds the moment ntasker resumes it (module
+`ntasker.usagelimit`). A column, not memory: the pause survives a server restart. No terminal output is parsed; every
+signal is structured data.
 
-- **Detection:** Claude Code fires the `StopFailure` hook instead of `Stop` when an API error ended the turn; its
-  JSON carries `error` (`rate_limit`, `overloaded`, `authentication_failed`, ...). The spawn settings match
-  `rate_limit` and run `ntasker hook limit`, which posts `POST /api/claude/sessions/{task_id}/limit` (a subagent's
-  failure is ignored). The hook payload has no reset time.
-- **End time:** the server asks the usage endpoint (see below) for the windows' `resets_at`. A window at 100 % is
-  the one that bites -- with several full ones the latest reset counts; with none at 100 % yet the fullest window is
-  taken. A guess too early only costs one retry that hits the limit again and is rescheduled.
-- **Resume:** the queue worker types `[nTasker] The usage limit has reset. Continue your task where you left off.`
-  into the session 60 s after that reset. The blocker card in the conversation shows the time.
+**Detection** -- Claude Code stops a session at a limit in two ways, and ntasker listens for both:
 
-The limit is the account's, so a known reset also **holds back the queue**: until then it starts no further Claude
-run (other agents keep running). A held-back entry shows an hourglass badge with the reset time; it starts together
-with the resumed sessions.
+- **Grace allowance:** shortly before the limit, Claude Code adds a note to the conversation (in the transcript a
+  user event flagged `usageLimitNote: "wrap_up"`); the agent wraps up and ends its turn normally. The note stays in
+  force until a `usageLimitNote: "release"` follows. Checked on the turn's `Stop` hook (`ntasker hook waiting`) of an
+  open task not in review.
+- **Turn cut off:** Claude Code fires the `StopFailure` hook instead of `Stop`; the spawn settings match `rate_limit`
+  and run `ntasker hook limit` -> `POST /api/claude/sessions/{task_id}/limit` (a subagent's failure is ignored). The
+  transcript holds an API error event (`isApiErrorMessage`, `error: rate_limit`) with the limit message.
+- **The agent reports it:** `ntasker finish --status failed|blocked` while the transcript shows either signal is taken
+  for what it is: the report is stored, the run is paused -- `limit` in the run log, not `blocked`; the task stays queued
+  (also with `fail_continue`), keeps its phase and its directory locks, the session stays open. `finish` prints the
+  resume time and tells the agent to stop. This also covers an external `/task` session. The run rules tell the agent
+  not to `finish` on a limit at all; a custom rules text without that line is still covered by this check.
 
-While parked, the session reads *waiting* but not *turn over*, so queued agent messages are not typed in (they would
-hit the limit too). Any reply of your own clears the parked state. Without a subscription login (no reset time) the
-session stays parked until you reply. Only sessions ntasker spawned can be resumed -- an external `/task` session has
-no terminal ntasker can type into. The parked state lives in memory and ends with the server.
+**Status:** however it was detected, nTasker records the pause itself -- the agent is cut off and cannot. A fasttrack
+run gets one run-log row with status `limit` (summary: `usage limit reached -- paused until <time>` plus the limit
+message); moving the pause to a later reset adds none. Every task shows *Paused until ...* on its card.
 
-`POST /api/claude/sessions/{task_id}/limit` -> `{"resume_at": ISO | null}`; 404 without a live session.
+**Reset time:** the usage endpoint's `resets_at` (see below; a window at 100 % is the one that bites, several full
+ones: the latest reset; none at 100 % yet: the fullest window), else the "resets 3pm" of the limit message. Unknown:
+ntasker looks again in 15 minutes. The run resumes 60 s past the reset. Before a due run is resumed the windows are
+read once more: one still at 100 % moves the pause to its reset. Without readable windows the resume is simply tried
+-- a limit that still bites pauses the run again, never in a tight loop.
+
+**Resume** (queue worker, every pause whose moment has come, in queue order):
+
+- a live spawned session gets `[nTasker] The usage limit has reset. Continue your task where you left off.` typed in;
+- a session that ended meanwhile (server restart, closed) is reopened with `claude --resume <session_id>` and that
+  prompt as its next message -- through the queue, so lane, lock and dependency rules apply like to any start;
+- a live external `/task` session has no terminal ntasker can type into: the prompt goes in as an nTasker message,
+  handed over on the session's next hook.
+
+A paused entry keeps its lane until it is resumed (another task in the same project would work in the same
+directory). The limit is the account's, so a pause also **holds back the queue**: until the latest pause ends it
+starts no further Claude run (other agents keep running). Paused and held-back entries show an hourglass badge with
+the time; the task card shows *Paused until ...*, the conversation's blocker card the resume time.
+
+While paused, a live session reads *waiting* but not *turn over*, so queued agent messages are not typed in (they
+would hit the limit too). If you carry on by hand and the turn ends without a limit, the pause ends. A hand-off
+(`finish --status ok`) ends it too.
+
+`POST /api/claude/sessions/{task_id}/limit` -> `{"resume_at": ISO}`; 404 without a live session.
 
 ## Security
 

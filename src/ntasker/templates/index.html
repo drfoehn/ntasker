@@ -1534,6 +1534,7 @@
                     {# ===== Run log ===== #}
                     {# Every fasttrack run leaves one outcome: ok (green), failed / blocked #}
                     {# (with the agent's summary) or ended (session died without finish). #}
+                    {# limit: a usage limit paused it -- nTasker's record, resumed after the reset. #}
                     {# Acknowledging deletes the entry; the report stays on the task. #}
                     <div class="task-queue-outcomes" x-show="outcomes.length && outcomesOpen" x-cloak>
                         <template x-for="o in outcomes" :key="o.id">
@@ -1806,6 +1807,11 @@
                                                     <i class="ti ti-bolt me-1"></i>{{ t('Fasttrack') }}
                                                 </span>
                                             </template>
+                                            <template x-if="task.limit_until && task.status !== 'done'">
+                                                <span class="badge bg-orange-lt" :title="$i18n('limit_badge_hint')">
+                                                    <i class="ti ti-hourglass-high me-1"></i><span x-text="limitBadge(task)"></span>
+                                                </span>
+                                            </template>
                                         </div>
 
                                         <div x-show="task._expanded && task.description"
@@ -2017,6 +2023,11 @@
                                                 <template x-if="task.fasttrack">
                                                     <span class="badge bg-teal-lt" :title="$i18n('fasttrack_badge')">
                                                         <i class="ti ti-bolt me-1"></i>{{ t('Fasttrack') }}
+                                                    </span>
+                                                </template>
+                                                <template x-if="task.limit_until && task.status !== 'done'">
+                                                    <span class="badge bg-orange-lt" :title="$i18n('limit_badge_hint')">
+                                                        <i class="ti ti-hourglass-high me-1"></i><span x-text="limitBadge(task)"></span>
                                                     </span>
                                                 </template>
 

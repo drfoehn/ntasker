@@ -154,8 +154,8 @@ An entry stays queued but is passed over when
 
 * one of its dependencies is still open (the same guard the kanban drag applies), or
 * its agent's CLI is not installed, or
-* it is a Claude task and a usage limit is active (badge: the reset time, see
-  [claude-runs.md](claude-runs.md#resuming-after-a-usage-limit)), or
+* it is a Claude task and a usage limit pauses a run, or it is such a paused run itself (badge: the resume time,
+  see [claude-runs.md](claude-runs.md#resuming-after-a-usage-limit)), or
 * another task's live session holds one of its directories (badge `#<holder>`), or
 * with `require_clean` on, one of its directories has uncommitted changes (badge `dirty: <project>`).
 
@@ -233,9 +233,11 @@ the next tick.
 ### The run log
 
 Every fasttrack run leaves one row in `run_outcomes` -- also when its session ends **without** `finish` (crash, stop):
-the worker then writes an `ended` row itself. The panel's *Run log* button (visible while there are entries) lists
-them newest first: a green check for `ok`, red for `failed`, amber for `blocked` / `ended`, with the agent's one-line
-summary, the commit, the changed files and the suggested follow-ups. The check button acknowledges an entry, which
+the worker then writes an `ended` row itself. A run a usage limit stopped gets a `limit` row from nTasker (the agent is
+cut off and cannot report it; see [claude-runs.md](claude-runs.md#resuming-after-a-usage-limit)) -- no failure, the run
+is resumed after the reset. The panel's *Run log* button (visible while there are entries) lists them newest first: a
+green check for `ok`, red for `failed`, amber for `blocked` / `ended`, an orange hourglass for `limit`, with the
+one-line summary, the commit, the changed files and the suggested follow-ups. The check button acknowledges an entry, which
 deletes it; the report itself stays on the task.
 
 - `files_changed` is derived server-side from the run's baselines (`rundiff.changed_paths`) -- the same diff the Diff

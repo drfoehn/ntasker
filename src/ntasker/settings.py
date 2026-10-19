@@ -192,6 +192,10 @@ RUN_RULES_DEFAULT = """\
   `ntasker finish {id} --status failed` (or `--status blocked` when the
   blocker is outside this task) with the same kind of report on stdin,
   then stop. The task keeps its phase.
+- A usage limit is no blocker: when you are told the usage limit is
+  reached, do not run `ntasker finish` -- end your turn with a short
+  note of where you are. nTasker pauses the task and continues this
+  session once the limit has reset.
 - Never set status=done or archive on your own initiative -- only when
   the user or the task description explicitly tells you to (then:
   finish, commit if asked, then `ntasker done {id}` as the very last
@@ -223,6 +227,10 @@ RUN_RULES_NO_REPORT_DEFAULT = """\
   `ntasker finish {id} --status failed` (or
   `--status blocked` when the blocker is outside this task) with the
   reason as summary, then stop. The task keeps its phase.
+- A usage limit is no blocker: when you are told the usage limit is
+  reached, do not run `ntasker finish` -- end your turn with a short
+  note of where you are. nTasker pauses the task and continues this
+  session once the limit has reset.
 - Never set status=done or archive on your own initiative -- only when
   the user or the task description explicitly tells you to (then:
   finish, commit if asked, then `ntasker done {id}` as the very last
@@ -282,8 +290,8 @@ FASTTRACK_RULES_DEFAULT = """\
           --next "<follow-up>" <<'EOF'
       <report: what you did, what you verified>
       EOF
-- On a failure or a blocker: do not commit, do not touch other task
-  IDs -- report and stop:
+- On a failure or a blocker (a usage limit is none, see above): do
+  not commit, do not touch other task IDs -- report and stop:
       ntasker finish {id} --status failed --summary "<one line>" <<'EOF'
       <what you tried, what is wrong, what the user has to decide>
       EOF
@@ -304,8 +312,8 @@ FASTTRACK_RULES_NO_REPORT_DEFAULT = """\
 - Then, as the VERY LAST command (it ends this session):
       ntasker finish {id} --status ok --commit <sha> --summary "<one line>" \\
           --next "<follow-up>"
-- On a failure or a blocker: do not commit, do not touch other task
-  IDs -- report and stop:
+- On a failure or a blocker (a usage limit is none, see above): do
+  not commit, do not touch other task IDs -- report and stop:
       ntasker finish {id} --status failed --summary "<what is wrong>"
   (`--status blocked` when the blocker is outside this task.)
 - After `ntasker finish` run nothing else.\

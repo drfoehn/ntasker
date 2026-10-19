@@ -2007,6 +2007,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         outcomeIcon(status) {
             if (status === 'ok') return 'ti-circle-check text-success';
             if (status === 'failed') return 'ti-circle-x text-danger';
+            if (status === 'limit') return 'ti-hourglass-high text-orange';
             return 'ti-alert-triangle text-warning';
         },
 
@@ -2180,6 +2181,11 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             const skip = this.queueSkipped[item.id];
             if (skip) return skip.reason === 'dirty' ? _i('queue_dirty') : _i('queue_locked');
             return '';
+        },
+
+        // A run a usage limit paused: when nTasker continues it.
+        limitBadge(task) {
+            return _i('limit_badge') + ' ' + this.formatAbsolute(task.limit_until);
         },
 
         // A Claude entry held back until the usage limit resets, with that time.
