@@ -111,12 +111,12 @@ def resolve_update_command(setting: str | None) -> list[str]:
     if checkout:
         if _has_pip():
             return [sys.executable, "-m", "pip", "install", "-e", checkout]
-        if shutil.which("uv"):
+        if find_uv():
             return ["uv", "pip", "install", "--python", sys.executable, "-e", checkout]
         return [sys.executable, "-m", "pip", "install", "-e", checkout]
     if _has_pip():
         return [sys.executable, "-m", "pip", "install", "-U", "ntasker"]
-    if shutil.which("uv"):
+    if find_uv():
         return ["uv", "pip", "install", "--python", sys.executable, "-U", "ntasker"]
     return [sys.executable, "-m", "pip", "install", "-U", "ntasker"]
 
@@ -136,9 +136,47 @@ def resolve_install_command(extra: str, packages: list[str]) -> list[str]:
         return ["uv", "tool", "install", f"ntasker[{extra}]"]
     if _has_pip():
         return [sys.executable, "-m", "pip", "install", *packages]
-    if shutil.which("uv"):
+    if find_uv():
         return ["uv", "pip", "install", "--python", sys.executable, *packages]
     return [sys.executable, "-m", "pip", "install", *packages]
+
+
+def _uv_candidates() -> list[str]:
+    """Places the uv installers put ``uv`` -- checked when it is not on
+    ``PATH``, as under launchd (``/usr/bin:/bin:/usr/sbin:/sbin``)."""
+    home = os.path.expanduser("~")
+    cands = [os.environ.get("UV", "")]
+    if os.environ.get("XDG_BIN_HOME"):
+        cands.append(os.path.join(os.environ["XDG_BIN_HOME"], "uv"))
+    cands += [
+        os.path.join(home, ".local", "bin", "uv"),
+        os.path.join(home, ".cargo", "bin", "uv"),
+        "/opt/homebrew/bin/uv",
+        "/usr/local/bin/uv",
+    ]
+    return [c for c in cands if c]
+
+
+def find_uv() -> str | None:
+    """Absolute path of the ``uv`` binary, or ``None`` when there is none."""
+    found = shutil.which("uv")
+    if found:
+        return found
+    for cand in _uv_candidates():
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return None
+
+
+def runnable(cmd: list[str]) -> list[str]:
+    """``cmd`` ready for ``subprocess``: a bare ``uv`` becomes its absolute
+    path, so the update also works when the service's ``PATH`` lacks
+    ``~/.local/bin``. Everything else passes through unchanged."""
+    if cmd and cmd[0] == "uv":
+        uv = find_uv()
+        if uv:
+            return [uv, *cmd[1:]]
+    return cmd
 
 
 def install_needs_restart() -> bool:

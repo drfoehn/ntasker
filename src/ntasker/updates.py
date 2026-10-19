@@ -137,7 +137,7 @@ def _run_update(cmd: list[str], restart: bool, restart_ok: Callable[[], bool]) -
     from ntasker import service  # noqa: PLC0415
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)  # noqa: S603 -- user-configured / auto-detected
+        proc = subprocess.run(service.runnable(cmd), capture_output=True, text=True)  # noqa: S603 -- user-configured / auto-detected
         state, output = ("done" if proc.returncode == 0 else "failed"), proc.stderr or proc.stdout
     except OSError as exc:
         state, output = "failed", str(exc)
