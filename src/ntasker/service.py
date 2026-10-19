@@ -143,17 +143,17 @@ def resolve_install_command(extra: str, packages: list[str]) -> list[str]:
 
 def _uv_candidates() -> list[str]:
     """Places the uv installers put ``uv`` -- checked when it is not on
-    ``PATH``, as under launchd (``/usr/bin:/bin:/usr/sbin:/sbin``)."""
-    home = os.path.expanduser("~")
+    ``PATH``, as under launchd (``/usr/bin:/bin:/usr/sbin:/sbin``).
+
+    ``$UV`` and ``$XDG_BIN_HOME`` first, then the shared
+    :func:`ntasker.agents.well_known_bin_dirs`, then ``~/.cargo/bin``."""
+    from ntasker.agents import well_known_bin_dirs  # noqa: PLC0415
+
     cands = [os.environ.get("UV", "")]
     if os.environ.get("XDG_BIN_HOME"):
         cands.append(os.path.join(os.environ["XDG_BIN_HOME"], "uv"))
-    cands += [
-        os.path.join(home, ".local", "bin", "uv"),
-        os.path.join(home, ".cargo", "bin", "uv"),
-        "/opt/homebrew/bin/uv",
-        "/usr/local/bin/uv",
-    ]
+    cands += [os.path.join(d, "uv") for d in well_known_bin_dirs()]
+    cands.append(os.path.join(os.path.expanduser("~"), ".cargo", "bin", "uv"))
     return [c for c in cands if c]
 
 
