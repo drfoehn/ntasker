@@ -4359,7 +4359,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             this.runModes[id] = mode;
             this._saveRunModes();
             this.closeRunDiff();   // the Diff page covers both -- the switch must show something
-            if (mode !== 'terminal') this.loadConversation(true);
+            if (mode !== 'terminal') { this.loadConversation(true); this.focusConvReply(); }
             if (mode === 'chat') return;
             this.$nextTick(() => {
                 this._ensureTabConnected(id);
@@ -4393,6 +4393,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // The report pane follows the same tab, so its task is reloaded too.
         _loadConvFresh() {
             this.loadRunReport();
+            this.focusConvReply();
             this.conv = null;
             this.convTurns = [];
             this.convUsage = null;
@@ -4913,6 +4914,16 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         onConvDrop(e) {
             this.convDragOver = false;
             this.addConvImages(e.dataTransfer ? Array.from(e.dataTransfer.files) : []);
+        },
+
+        // Put the cursor into the conversation's reply box -- when the pane
+        // opens and after each button in it, so typing goes on right away.
+        // A no-op while the box is not on screen (terminal or diff shown).
+        focusConvReply() {
+            this.$nextTick(() => {
+                const el = this.$refs.convReplyBox;
+                if (el && el.isConnected && el.offsetParent !== null) el.focus({ preventScroll: true });
+            });
         },
 
         // Grow the reply box with its text (up to the CSS max-height), so a

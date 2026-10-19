@@ -281,7 +281,8 @@ against the window (1M when the task's model, or the `claude_model` setting, car
 50 %, yellow from 50 %, red from 80 %. While the session
 waits for you, the pane answers for the terminal: a permission dialog gets *Allow* / *Deny*, a question
 (`AskUserQuestion`) its card, and the reply box sends a prompt -- all of it typed into the PTY exactly as the terminal
-would. Images
+would. The reply box holds the cursor: it takes the focus when the pane opens (also in split mode) and again after
+every button in the pane or the view switch above it, unless the terminal or diff takes the screen. Images
 pasted (`Ctrl-V`) or dropped onto the reply box wait there as removable thumbnails; *Send* / `Enter` ships them like a
 terminal drop (see above) ahead of the text. The caret next to *Send* offers *Send using fresh context*: it types
 `/clear` first and the reply about 3 s later into the new context (`CLEAR_SETTLE_MS` in `app.js`); the button never

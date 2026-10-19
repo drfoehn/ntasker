@@ -2104,7 +2104,7 @@
                     {# Header row 2: the view switch (conversation / terminal / diff, plus #}
                     {# the report as a side pane) on the left, the run's actions on the right. #}
                     <template x-if="activeTab">
-                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap" @click="$event.target.closest('button') && focusConvReply()">
                         <div class="btn-group view-switch" role="group" :aria-label="$i18n('conv_views')">
                             <template x-if="runConvSupported">
                                 <button type="button" class="btn" :class="runView === 'chat' ? 'active' : ''"

@@ -8,8 +8,10 @@
 {# stops the agent (usage limit, login, network) shows as a card. Esc or the #}
 {# Interrupt button stops a running turn, like Esc in the terminal. Replies #}
 {# sent while the agent works queue above the reply box. The task's #}
-{# report sits in the pane beside it (see index.html). #}
-<div class="claude-conv-page card flex-fill d-flex flex-column" @keydown.escape.window="onConvEscape($event)">
+{# report sits in the pane beside it (see index.html). The reply box takes #}
+{# the focus when the pane opens and after every button in it. #}
+<div class="claude-conv-page card flex-fill d-flex flex-column" @keydown.escape.window="onConvEscape($event)"
+     @click="$event.target.closest('button') && focusConvReply()">
     <div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom flex-wrap">
         <i class="ti ti-messages fs-3 text-secondary"></i>
         <span class="fw-medium" x-text="$i18n('conv_title')"></span>
@@ -380,7 +382,7 @@
             <div class="d-flex gap-2">
                 {# Plugin buttons left of the field (voice dictation; see ntasker/plugins). #}
                 {% for tpl in plugin_slots['conv_reply'] %}{% include tpl %}{% endfor %}
-                <textarea class="form-control" rows="1" x-model="convReply" x-ref="convReplyBox"
+                <textarea class="form-control" rows="1" x-model="convReply" x-ref="convReplyBox" x-init="focusConvReply()"
                           x-effect="convReply; $nextTick(() => fitConvReply())"
                           :placeholder="$i18n('conv_reply_placeholder')"
                           @paste="onConvPaste($event)"
