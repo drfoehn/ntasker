@@ -5,6 +5,9 @@ All notable changes to ntasker.
 Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
 ## [Unreleased]
+
+## [3.18.0] — 2026-10-19
+Update button finds `uv` outside the service PATH (launchd); run `uv tool upgrade ntasker` once.
 Usage limit: nTasker detects it, logs `limit` and pauses the run instead of blocking; resumes all after reset.
 
 ## [3.17.0] — 2026-10-17
