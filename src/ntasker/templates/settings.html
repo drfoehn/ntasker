@@ -117,6 +117,28 @@
 
         <div class="page-body">
             <div class="container-fluid">
+                {# What the red dot on the settings cog stands for, fixable in one click. #}
+                <div class="alert alert-danger" x-show="attentionItems().length" x-cloak>
+                    <div class="d-flex align-items-start gap-3">
+                        <div class="flex-fill">
+                            <h4 class="alert-title" x-text="$i18n('attention_title')"></h4>
+                            <ul class="mb-0">
+                                <template x-for="a in attentionItems()" :key="a.key">
+                                    <li>
+                                        <a href="#plugins" @click.prevent="go('plugins')" x-text="a.label"></a>:
+                                        <span x-text="a.assets.installed ? $i18n('agent_assets_drift_badge') : $i18n('agent_assets_missing_badge')"></span>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn btn-danger flex-shrink-0"
+                                @click="fixAllAttention()" :disabled="assetsBusy !== null">
+                            <span class="spinner-border spinner-border-sm me-2" x-show="assetsBusy === '*'"></span>
+                            <i class="ti ti-checks me-1" x-show="assetsBusy !== '*'"></i>
+                            <span x-text="$i18n('attention_fix_all')"></span>
+                        </button>
+                    </div>
+                </div>
                 <div class="card settings-card">
                     <div class="row g-0">
 

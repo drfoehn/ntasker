@@ -42,6 +42,11 @@ function topnav(pageVersion = '') {
             this.applyTheme();
             this.loadUpdateInfo();
             this.loadSettingsAttention();
+            // The settings page re-announces the agent list after every
+            // install, so the dot clears without a reload.
+            window.addEventListener('ntasker:agents', (e) => {
+                this.settingsAttention = e.detail.some(agentAssetsTodo);
+            });
             if (pageVersion) {
                 this._versionTimer = setInterval(() => this._checkServerVersion(pageVersion), 30000);
             }

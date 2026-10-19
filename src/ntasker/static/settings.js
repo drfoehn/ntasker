@@ -134,6 +134,11 @@ function settingsPage() {
             return this.agents.some(agentAssetsTodo);
         },
 
+        // The agents behind the red dot -- listed atop the page.
+        attentionItems() {
+            return this.agents.filter(agentAssetsTodo);
+        },
+
         // ---- value helpers ------------------------------------------------
 
         isOn(key) {
@@ -212,6 +217,8 @@ function settingsPage() {
                 if (!r.ok) return;
                 const data = await r.json();
                 this.agents = data.agents || [];
+                // Lets the top bar's settings dot follow without a reload.
+                window.dispatchEvent(new CustomEvent('ntasker:agents', {detail: this.agents}));
                 this.agentDefault = data.default || 'claude';
                 // Reflect the effective default in the picker when unset, so it
                 // shows the agent tasks actually fall back to.
@@ -509,6 +516,31 @@ function settingsPage() {
             } finally {
                 this.assetsBusy = null;
             }
+        },
+
+        // "Fix all" atop the page: install / update every pending integration
+        // in one go (drifted ones forced, as their card's button does).
+        async fixAllAttention() {
+            if (this.assetsBusy) return;
+            this.assetsBusy = '*';
+            let ok = true;
+            try {
+                for (const a of this.attentionItems()) {
+                    const r = await fetch(`/api/agents/${a.key}/assets/install`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({force: !!a.assets.installed}),
+                    });
+                    const data = r.ok ? await r.json() : null;
+                    if (!data || !data.success) ok = false;
+                }
+            } catch (e) {
+                ok = false;
+            } finally {
+                await this.refreshAgents();
+                this.assetsBusy = null;
+            }
+            this.toast(this.i18n(ok ? 'attention_all_done' : 'agent_install_failed'));
         },
 
         // Install or remove the completion script for one shell.
