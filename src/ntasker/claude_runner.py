@@ -1126,6 +1126,11 @@ def _save_upload(name: str, data: bytes) -> str:
 
 PTY_WRITE_TIMEOUT_SECONDS = 10.0
 
+# Claude Code drops an Enter that arrives while it still shows "Pasting..." for
+# a pasted image path: the reply box's "image, text, Enter" then sits typed
+# but unsent. Hold such an Enter until this long after the paste.
+PASTE_SUBMIT_GAP_SECONDS = 1.0
+
 
 async def _write_pty(sess: TermSession, data: bytes) -> None:
     """Write all of ``data`` to the session's PTY.
@@ -1212,12 +1217,17 @@ async def serve(websocket: WebSocket, task_id: int) -> None:
                 await websocket.send_json({"type": "exit", "code": payload})
 
     out_task = asyncio.create_task(pump_out())
+    pasted_at = float("-inf")   # when the last file path went in
     try:
         while True:
             msg = await websocket.receive_json()
             kind = msg.get("type")
             if kind == "input" and sess.alive:
                 data = str(msg.get("data", ""))
+                if data == "\r":
+                    wait = pasted_at + PASTE_SUBMIT_GAP_SECONDS - time.monotonic()
+                    if wait > 0:
+                        await asyncio.sleep(wait)
                 await _write_pty(sess, data.encode("utf-8", "ignore"))
                 _note_interrupt(sess, data)
             elif kind == "file" and sess.alive:
@@ -1236,6 +1246,7 @@ async def serve(websocket: WebSocket, task_id: int) -> None:
                     continue
                 path = _save_upload(str(msg.get("name", "")), blob)
                 await _write_pty(sess, f"\x1b[200~{shlex.quote(path)} \x1b[201~".encode("utf-8"))
+                pasted_at = time.monotonic()
             elif kind == "resize":
                 _resize(sess, msg.get("rows", 24), msg.get("cols", 80))
             elif kind == "stop":
