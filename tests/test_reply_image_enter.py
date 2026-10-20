@@ -1,4 +1,4 @@
-"""An Enter right after a pasted image path waits, so Claude Code takes it."""
+"""An Enter right after a pasted image path waits for its chip, so Claude Code takes it."""
 
 import asyncio
 import base64
@@ -34,6 +34,9 @@ class FakeWS:
         pass
 
 
+CHIP_DELAY = 0.3  # how long the fake Claude Code "pastes" before the chip shows
+
+
 @pytest.fixture
 def written(tmp_path, monkeypatch):
     set_db_path(tmp_path / "t.db")
@@ -46,13 +49,24 @@ def written(tmp_path, monkeypatch):
     os.close(slave)
     os.set_blocking(master, False)
     cr.SESSIONS[998] = cr.TermSession(task_id=998, proc=proc, master_fd=master)
+    sess = cr.SESSIONS[998]
     log: list[tuple[float, bytes]] = []
+    images = 0
+
+    def chip(n):
+        # Like Claude Code's redraw: a cursor move stands in for the space.
+        for q in list(sess.subscribers):
+            q.put_nowait(("output", f"\x1b[2m[Image\x1b[1C#{n}]\x1b[0m".encode()))
 
     async def record(_sess, data):
+        nonlocal images
         log.append((time.monotonic(), data))
+        if data.startswith(b"\x1b[200~") and data.rstrip(b" \x1b[201~").endswith(b".png"):
+            images += 1
+            asyncio.get_running_loop().call_later(CHIP_DELAY, chip, images)
 
     monkeypatch.setattr(cr, "_write_pty", record)
-    monkeypatch.setattr(cr, "PASTE_SUBMIT_GAP_SECONDS", 0.3)
+    monkeypatch.setattr(cr, "PASTE_ATTACH_TIMEOUT_SECONDS", 1.0)
     yield log
     cr.SESSIONS.pop(998, None)
     proc.kill()
@@ -64,9 +78,13 @@ def _run(msgs):
     asyncio.run(cr.serve(FakeWS([{"type": "attach"}, *msgs]), 998))
 
 
-def test_enter_after_image_waits_for_the_gap(written):
+def _image(name="image.png"):
+    return {"type": "file", "name": name, "data": base64.b64encode(PNG).decode()}
+
+
+def test_enter_after_image_waits_for_the_chip(written):
     _run([
-        {"type": "file", "name": "image.png", "data": base64.b64encode(PNG).decode()},
+        _image(),
         {"type": "input", "data": "what is this?"},
         {"type": "input", "data": "\r"},
     ])
@@ -76,7 +94,28 @@ def test_enter_after_image_waits_for_the_gap(written):
     assert saved.read_bytes() == PNG
     saved.unlink()
     assert (text, enter) == (b"what is this?", b"\r")
-    assert t_enter - t_paste >= 0.3
+    assert CHIP_DELAY <= t_enter - t_paste < 1.0
+
+
+def test_enter_waits_for_every_image(written):
+    _run([_image(), _image(), {"type": "input", "data": "\r"}])
+    (t_paste, _), _, (t_enter, enter) = written
+    assert enter == b"\r"
+    assert CHIP_DELAY <= t_enter - t_paste < 1.0
+
+
+def test_enter_gives_up_after_the_timeout(written, monkeypatch):
+    monkeypatch.setattr(cr, "_image_numbers", lambda data: [])
+    _run([_image(), {"type": "input", "data": "\r"}])
+    (t_paste, _), (t_enter, enter) = written
+    assert enter == b"\r"
+    assert t_enter - t_paste >= 1.0
+
+
+def test_enter_after_other_file_goes_straight_in(written):
+    _run([_image("notes.txt"), {"type": "input", "data": "\r"}])
+    (t_paste, _), (t_enter, _) = written
+    assert t_enter - t_paste < 0.2
 
 
 def test_enter_without_image_goes_straight_in(written):
