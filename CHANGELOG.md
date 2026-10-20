@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
 ## [Unreleased]
 
+## [3.19.0] — 2026-10-20
+Reply with a pasted image is sent on the first click, also for large images (waits until Claude Code attached it).
+Settings list all open items and fix them at once.
+
 ## [3.18.0] — 2026-10-19
 Update button finds `uv` outside the service PATH (launchd); run `uv tool upgrade ntasker` once.
 Usage limit: nTasker detects it, logs `limit` and pauses the run instead of blocking; resumes all after reset.
