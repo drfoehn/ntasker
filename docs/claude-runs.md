@@ -284,7 +284,10 @@ waits for you, the pane answers for the terminal: a permission dialog gets *Allo
 would. The reply box holds the cursor: it takes the focus when the pane opens (also in split mode) and again after
 every button in the pane or the view switch above it, unless the terminal or diff takes the screen. Images
 pasted (`Ctrl-V`) or dropped onto the reply box wait there as removable thumbnails; *Send* / `Enter` ships them like a
-terminal drop (see above) ahead of the text. The caret next to *Send* offers *Send using fresh context*: it types
+terminal drop (see above) ahead of the text. Claude Code drops an `Enter` that arrives while it still shows
+*Pasting...* -- a large image takes seconds -- so the server holds the `Enter` that follows until every pasted image
+shows up as its `[Image #N]` chip in the terminal, at most `PASTE_ATTACH_TIMEOUT_SECONDS` (8 s).
+The caret next to *Send* offers *Send using fresh context*: it types
 `/clear` first and the reply about 3 s later into the new context (`CLEAR_SETTLE_MS` in `app.js`); the button never
 remembers the choice. `/clear` makes Claude Code continue in a new session id and transcript, so the session's
 `SessionStart` hook (`ntasker hook clear` -> `POST /api/claude/sessions/<id>/rebind`) points the task at it -- the

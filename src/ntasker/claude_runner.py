@@ -23,6 +23,7 @@ import base64
 import binascii
 import contextlib
 import os
+import re
 import shlex
 import signal
 import sys
@@ -1126,6 +1127,24 @@ def _save_upload(name: str, data: bytes) -> str:
 
 PTY_WRITE_TIMEOUT_SECONDS = 10.0
 
+# Claude Code drops an Enter that arrives while it still shows "Pasting..." for
+# a pasted image path: the reply box's "image, text, Enter" then sits typed
+# but unsent. Such an Enter waits until every pasted image shows up as its
+# "[Image #N]" chip -- a large image takes seconds -- but never longer than this.
+PASTE_ATTACH_TIMEOUT_SECONDS = 8.0
+
+# An "[Image #N]" chip in PTY output; terminal escapes may stand in for the space.
+_ANSI_RE = re.compile(rb"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b[()][A-Z0-9]")
+_IMAGE_CHIP_RE = re.compile(rb"\[Image ?#(\d+)\]")
+
+# File types Claude Code attaches as an image chip when their path is pasted.
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def _image_numbers(data: bytes) -> list[int]:
+    """The ``N`` of every ``[Image #N]`` chip in raw PTY output."""
+    return [int(n) for n in _IMAGE_CHIP_RE.findall(_ANSI_RE.sub(b"", data))]
+
 
 async def _write_pty(sess: TermSession, data: bytes) -> None:
     """Write all of ``data`` to the session's PTY.
@@ -1203,10 +1222,26 @@ async def serve(websocket: WebSocket, task_id: int) -> None:
     if not sess.alive:
         await websocket.send_json({"type": "exit", "code": sess.exit_code})
 
+    # Pasted images not yet shown as a chip. Chip numbers only grow within a
+    # session, so a number above the highest seen so far is a new chip.
+    pending_images = 0
+    last_image = max(_image_numbers(bytes(sess.buffer)), default=0)
+    images_attached = asyncio.Event()
+    images_attached.set()
+    tail = b""  # keeps a chip split across two reads matchable
+
     async def pump_out() -> None:
+        nonlocal pending_images, last_image, tail
         while True:
             kind, payload = await queue.get()
             if kind == "output":
+                tail = (tail + payload)[-4096:]
+                new = {n for n in _image_numbers(tail) if n > last_image}
+                if new:
+                    last_image = max(new)
+                    pending_images -= len(new)
+                    if pending_images <= 0:
+                        images_attached.set()
                 await websocket.send_json({"type": "output", "data": _b64(payload)})
             elif kind == "exit":
                 await websocket.send_json({"type": "exit", "code": payload})
@@ -1218,6 +1253,11 @@ async def serve(websocket: WebSocket, task_id: int) -> None:
             kind = msg.get("type")
             if kind == "input" and sess.alive:
                 data = str(msg.get("data", ""))
+                if data == "\r" and not images_attached.is_set():
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(images_attached.wait(), PASTE_ATTACH_TIMEOUT_SECONDS)
+                    pending_images = 0
+                    images_attached.set()
                 await _write_pty(sess, data.encode("utf-8", "ignore"))
                 _note_interrupt(sess, data)
             elif kind == "file" and sess.alive:
@@ -1235,6 +1275,9 @@ async def serve(websocket: WebSocket, task_id: int) -> None:
                 if not blob or len(blob) > MAX_UPLOAD_BYTES:
                     continue
                 path = _save_upload(str(msg.get("name", "")), blob)
+                if Path(path).suffix.lower() in _IMAGE_SUFFIXES:
+                    pending_images += 1
+                    images_attached.clear()
                 await _write_pty(sess, f"\x1b[200~{shlex.quote(path)} \x1b[201~".encode("utf-8"))
             elif kind == "resize":
                 _resize(sess, msg.get("rows", 24), msg.get("cols", 80))
