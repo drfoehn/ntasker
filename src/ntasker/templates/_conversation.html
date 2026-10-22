@@ -38,7 +38,8 @@
         </button>
     </div>
 
-    <div class="claude-conv-body flex-fill overflow-auto px-3 py-3" x-ref="convBody">
+    <div class="claude-conv-body flex-fill overflow-auto px-3 py-3" x-ref="convBody"
+         @click="convLinkClick($event)">
         <template x-if="!convTurns.length">
             <div class="text-secondary text-center py-5" x-text="$i18n('conv_empty')"></div>
         </template>
