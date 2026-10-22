@@ -228,6 +228,20 @@ function _convPreview(text) {
     return line.length > 160 ? line.slice(0, 159) + '…' : line;
 }
 
+// A link target that names a file on this machine -> its path, else null.
+// ``file://`` URLs, ``~/`` paths and absolute paths outside ntasker's own
+// routes count; ``/api/…``, ``/static/…`` and the like stay page links.
+const _APP_ROUTE = /^\/(api|static|settings|workspace|docs|openapi\.json)(\/|$|\?)/;
+function _localFilePath(href) {
+    if (!href) return null;
+    let path = href;
+    if (/^file:\/\//i.test(path)) path = path.replace(/^file:\/\/(localhost)?/i, '');
+    else if (!path.startsWith('~/') && (!path.startsWith('/') || path.startsWith('//') || _APP_ROUTE.test(path))) return null;
+    try { path = decodeURIComponent(path.split('#')[0]); } catch (_e) { return null; }
+    // Only something that looks like a file: the last segment has an extension.
+    return /\/[^/]+\.[A-Za-z0-9]{1,8}$/.test(path) ? path : null;
+}
+
 function renderMarkdown(text) {
     if (!window.marked) return '<pre>' + escapeHtml(text) + '</pre>';
     const raw = window.marked.parse(text);
@@ -4687,12 +4701,40 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             return a ? a.text : '';
         },
 
-        // An edited file's link in the step summary: open the Diff on it.
+        // An edited file's link in the step summary: open the Diff on it when
+        // the file is part of the run's change set. A file outside the held
+        // repos (a generated report, an .xlsx in the documents folder) has no
+        // diff -- it opens in the workspace file viewer instead.
         async openDiffFile(file) {
+            const id = this.claudeView;
+            let data = null;
+            try {
+                const r = await fetch(`/api/tasks/${id}/diff`);
+                if (r.ok) data = await r.json();
+            } catch (_e) { /* treated as "not in the diff" */ }
+            if (this.claudeView !== id) return;
+            const match = (x) => file === x.path || file.endsWith(`/${x.dir}/${x.path}`);
+            const inDiff = !!(data && data.files.some(match));
+            if (!inDiff && typeof this.wsPreview === 'function') {
+                this.wsPreview(file);
+                return;
+            }
             this.runDiffOpen = true;
-            await this.loadDiff(this.claudeView);
-            const f = this.diff && this.diff.files.find(x => file === x.path || file.endsWith('/' + x.path));
+            await this.loadDiff(id);
+            const f = this.diff && this.diff.files.find(match);
             if (f) this.diffSelected = this.diffKey(f);
+        },
+
+        // Clicks in the conversation: a Markdown link to a local file
+        // (``/Users/…/report.md``, ``~/…``, ``file://…``) would navigate the
+        // page to a 404 -- open it like an edited-file link instead.
+        convLinkClick(event) {
+            const a = event.target.closest && event.target.closest('a[href]');
+            if (!a || a.classList.contains('claude-conv-file')) return;
+            const path = _localFilePath(a.getAttribute('href'));
+            if (!path) return;
+            event.preventDefault();
+            this.openDiffFile(path);
         },
 
         fmtTokens(n) {
