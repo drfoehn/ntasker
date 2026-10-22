@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
 ## [Unreleased]
 
+## [3.20.0] — 2026-10-22
+Running task: attach files (images, PDFs ...), tasks, skills and docs from the reply box; uploads swept on archive.
+Run view: files outside the repo and local file links in answers open in the viewer instead of the diff.
+
 ## [3.19.0] — 2026-10-20
 Reply with a pasted image is sent on the first click, also for large images (waits until Claude Code attached it).
 Settings list all open items and fix them at once.
