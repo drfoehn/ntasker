@@ -21,6 +21,7 @@
         file: 'ti-file',
         folder: 'ti-folder',
         mcp: 'ti-plug-connected',
+        task: 'ti-checkbox',
     };
 
     // Pull the server's `detail` out of a failed response; falls back to the
@@ -48,9 +49,22 @@
         return s;
     }
 
-    const freshPicker = target => ({
+    // `live`: the target task is running -- what gets attached now also
+    // becomes a chip of the next reply (convRefs), announced on send.
+    const freshPicker = (target, live) => ({
         open: true, target: target || null, tab: 'files', q: '', note: '', busy: false, path: '', picking: false,
+        live: !!live,
     });
+
+    // Read a File as base64 (the data: URL without its prefix).
+    function fileBase64(file) {
+        return new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result).split(',')[1] || '');
+            r.onerror = reject;
+            r.readAsDataURL(file);
+        });
+    }
 
     window.ntaskerPlugins.push(function (base) {
         // Entries to attach on create: [{kind, path, label, note}] -- sent
@@ -61,7 +75,9 @@
             // Picker state. `target` is the task the picked entry attaches to;
             // null = draft mode, picks collect in form.context until createTask
             // sends them along with the new task.
-            picker: { open: false, target: null, tab: 'files', q: '', note: '', busy: false, path: '', picking: false },
+            picker: { open: false, target: null, tab: 'files', q: '', note: '', busy: false, path: '', picking: false, live: false },
+            // Tasks for the picker's Tasks tab (GET /api/tasks, not archived).
+            pickerTasks: [],
             // Can the server open a native file dialog on this desktop? null =
             // not asked yet; the buttons stay hidden until it says yes.
             pickerNative: null,
@@ -84,11 +100,93 @@
             },
 
             // ---- picker ----
-            openPicker(task) {
-                this.picker = freshPicker(task);
+            openPicker(task, live) {
+                this.picker = freshPicker(task, live);
                 if (typeof this.loadWorkspace === 'function') this.loadWorkspace();
                 this.loadPickerNative();
                 this.loadMcpServers();
+                this.loadPickerTasks();
+            },
+
+            // The paperclip in the conversation pane: open the picker on the
+            // running task. Its attachments are fetched first so the picker's
+            // checkmarks show what the task already carries.
+            async openLiveContext() {
+                const id = this.claudeView;
+                if (id === null || id === undefined) return;
+                let context = [];
+                try {
+                    const res = await fetch(`/api/tasks/${id}/context`);
+                    if (res.ok) context = await res.json();
+                } catch (e) {
+                    // Open with an empty list -- attaching still works.
+                }
+                this.openPicker({ id, context }, true);
+            },
+
+            // Briefing text for the reply's chips (see sendConvReply in
+            // app.js): the same lines a fresh run gets, worded for a session
+            // that is already going. null after a toast -- the reply waits.
+            async convRefsBrief(taskId, refs) {
+                const ids = refs.filter(r => r.taskId === taskId).map(r => r.id);
+                if (!ids.length) return '';
+                try {
+                    const res = await fetch(`/api/tasks/${taskId}/context/brief`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids }),
+                    });
+                    if (!res.ok) {
+                        this.showToast(await errorDetail(res, t('ctx_attach_failed')), 'danger');
+                        return null;
+                    }
+                    return (await res.json()).text;
+                } catch (e) {
+                    this.showToast(t('ctx_attach_failed'), 'danger');
+                    return null;
+                }
+            },
+
+            // A reply chip's close button: detach the entry again.
+            async removeConvRef(i) {
+                const ref = this.convRefs[i];
+                if (!ref) return;
+                await this.detachContext({ id: ref.taskId }, { id: ref.id });
+            },
+
+            // Store a file under the user-data dir (POST /api/context/upload);
+            // returns {path, name}, or null after a toast.
+            async _uploadFile(file, name) {
+                try {
+                    const data = await fileBase64(file);
+                    const res = await fetch('/api/context/upload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: name || file.name || 'file', data }),
+                    });
+                    if (!res.ok) {
+                        this.showToast(await errorDetail(res, t('ctx_attach_failed')), 'danger');
+                        return null;
+                    }
+                    return await res.json();
+                } catch (e) {
+                    this.showToast(t('ctx_attach_failed'), 'danger');
+                    return null;
+                }
+            },
+
+            async loadPickerTasks() {
+                try {
+                    const res = await fetch('/api/tasks?archived=false');
+                    if (!res.ok) return;
+                    const tasks = await res.json();
+                    // Open tasks first, newest on top.
+                    this.pickerTasks = tasks
+                        .map(x => ({ id: x.id, title: x.title, project: x.project || '', status: x.status }))
+                        .sort((a, b) => (a.status === 'done') - (b.status === 'done') || b.id - a.id);
+                } catch (e) {
+                    // Leave the list as it was.
+                }
             },
 
             // "Files" is always there -- it needs no workspace directory, just
@@ -104,6 +202,7 @@
                 if (has('wiki')) tabs.push({ id: 'wiki', label: 'ws_knowledge', icon: 'ti-book' });
                 if (has('docs')) tabs.push({ id: 'docs', label: 'ws_documents', icon: 'ti-files' });
                 if (this.mcpServers.length) tabs.push({ id: 'mcp', label: 'ctx_mcp', icon: 'ti-plug-connected' });
+                tabs.push({ id: 'tasks', label: 'ctx_tasks', icon: 'ti-checkbox' });
                 return tabs;
             },
 
@@ -188,6 +287,19 @@
             get pickerItems() {
                 const q = this.picker.q;
                 if (this.picker.tab === 'files') return [];
+                if (this.picker.tab === 'tasks') {
+                    const self = this.picker.target ? this.picker.target.id : null;
+                    const rows = this.pickerTasks.filter(x => x.id !== self);
+                    const qs = (q || '').trim().replace(/^#/, '');
+                    const hits = /^\d+$/.test(qs) ? rows.filter(x => String(x.id).startsWith(qs))
+                        : filterItems(rows, q, ['title', 'project']);
+                    return hits.map(x => ({
+                        kind: 'task',
+                        label: `#${x.id} ${x.title}`,
+                        sub: [x.project, x.status === 'done' ? t('ctx_task_done') : ''].filter(Boolean).join(' -- '),
+                        path: 'task://' + x.id,
+                    }));
+                }
                 if (this.picker.tab === 'mcp') {
                     return filterItems(this.mcpServers, q, ['name', 'transport']).map(s => ({
                         kind: 'mcp',
@@ -263,22 +375,8 @@
                     const ext = (it.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
                     const name = file.name && file.name !== 'image.png' ? file.name
                         : 'pasted-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.' + ext;
-                    const data = await new Promise((resolve, reject) => {
-                        const r = new FileReader();
-                        r.onload = () => resolve(String(r.result).split(',')[1] || '');
-                        r.onerror = reject;
-                        r.readAsDataURL(file);
-                    });
-                    const res = await fetch('/api/context/upload', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name, data }),
-                    });
-                    if (!res.ok) {
-                        this.showToast(await errorDetail(res, t('ctx_attach_failed')), 'danger');
-                        continue;
-                    }
-                    const info = await res.json();
+                    const info = await this._uploadFile(file, name);
+                    if (!info) continue;
                     const item = { kind: 'file', path: info.path, label: info.name, is_dir: false };
                     if (!target) {
                         this.form.context = [...this.form.context.filter(c => c.path !== item.path), { ...item, note: '' }];
@@ -325,6 +423,10 @@
                     // a clone, so refreshAll() would not reach it.
                     task.context = [...(task.context || []).filter(c => c.path !== entry.path), entry];
                     this.picker.note = '';
+                    if (this.picker.live) {
+                        const ref = { taskId: task.id, id: entry.id, label: entry.label, icon: this.contextChipIcon(entry) };
+                        this.convRefs = [...this.convRefs.filter(r => r.id !== entry.id), ref];
+                    }
                     await this.refreshAll();
                 } finally {
                     this.picker.busy = false;
@@ -338,6 +440,7 @@
                     return;
                 }
                 task.context = (task.context || []).filter(c => c.id !== entry.id);
+                this.convRefs = this.convRefs.filter(r => r.id !== entry.id);
                 await this.refreshAll();
             },
 

@@ -685,14 +685,14 @@ def build_js_strings() -> dict[str, str]:
         "conv_send_options": _("More send options"),
         "conv_send_fresh": _("Send using fresh context"),
         "conv_send_fresh_hint": _("Clear the conversation context first, then send the message into the fresh one"),
-        "conv_image_remove": _("Remove image"),
+        "conv_attachment_remove": _("Remove attachment"),
         "conv_queue_title": _("Waiting -- goes in as soon as the agent can take it"),
         "conv_queue_now": _("Send now"),
         "conv_queue_now_hint": _("Hand it to the agent right away -- it takes it in at its next step"),
         "conv_queue_sent": _("Handed over"),
         "conv_queue_remove": _("Remove from the queue"),
         "conv_queue_fresh": _("Fresh context"),
-        "conv_queue_images": _("Images: {n}"),
+        "conv_queue_files": _("Attachments: {n}"),
         "conv_injected": _("Sent while it worked"),
         "conv_peer_from": _("Message from {name}"),
         "conv_peer_to": _("Message to {name}"),
@@ -1317,10 +1317,12 @@ def auto_archive_sweep() -> int:
 
 
 async def _auto_archive_loop() -> None:
-    """Run the auto-archive sweep on boot and then hourly."""
+    """Run the auto-archive sweep and the plugins' sweeps on boot and then hourly."""
     while True:
         with contextlib.suppress(Exception):
             await asyncio.to_thread(auto_archive_sweep)
+        with contextlib.suppress(Exception):
+            await asyncio.to_thread(plugins.run_sweeps)
         await asyncio.sleep(AUTO_ARCHIVE_INTERVAL)
 
 

@@ -14,6 +14,8 @@
                 <button type="button" class="btn-close" @click="picker.open = false" :aria-label="$i18n('close')"></button>
             </div>
             <div class="modal-body">
+                {# Live mode: the task is running; picks are announced to its session. #}
+                <div class="alert alert-info py-2 small" x-show="picker.live" x-text="$i18n('ctx_live_hint')"></div>
                 <ul class="nav nav-bordered mb-3" role="tablist">
                     <template x-for="tab in pickerTabs" :key="tab.id">
                         <li class="nav-item">

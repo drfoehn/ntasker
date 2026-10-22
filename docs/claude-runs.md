@@ -282,9 +282,11 @@ against the window (1M when the task's model, or the `claude_model` setting, car
 waits for you, the pane answers for the terminal: a permission dialog gets *Allow* / *Deny*, a question
 (`AskUserQuestion`) its card, and the reply box sends a prompt -- all of it typed into the PTY exactly as the terminal
 would. The reply box holds the cursor: it takes the focus when the pane opens (also in split mode) and again after
-every button in the pane or the view switch above it, unless the terminal or diff takes the screen. Images
-pasted (`Ctrl-V`) or dropped onto the reply box wait there as removable thumbnails; *Send* / `Enter` ships them like a
-terminal drop (see above) ahead of the text. Claude Code drops an `Enter` that arrives while it still shows
+every button in the pane or the view switch above it, unless the terminal or diff takes the screen. Files
+pasted (`Ctrl-V`) or dropped onto the reply box wait there as removable attachments (images as thumbnails, a PDF or
+any other file as a chip); *Send* / `Enter` ships them like a terminal drop (see above) ahead of the text. With the
+task-context plugin on, such a file is stored under the user-data dir and attached to the task instead of landing in
+the temp dir (`docs/task-context.md`). Claude Code drops an `Enter` that arrives while it still shows
 *Pasting...* -- a large image takes seconds -- so the server holds the `Enter` that follows until every pasted image
 shows up as its `[Image #N]` chip in the terminal, at most `PASTE_ATTACH_TIMEOUT_SECONDS` (8 s).
 The caret next to *Send* offers *Send using fresh context*: it types
@@ -309,7 +311,7 @@ cancelled dialog reads *Not answered*.
 next step (see *Send now* below), so it arrives before the agent wraps the task up. The server lists such sessions as
 `steerable` in `GET /api/claude/sessions` -- their hooks report them working and no dialog is open. A reply sent while
 a dialog is open, a *Fresh context* reply while the agent works, or one while other replies still wait is not typed in
-at once: it waits in a list above the reply box (text, image count, *Fresh context* badge) and goes in as soon as the
+at once: it waits in a list above the reply box (text, attachment count, *Fresh context* badge) and goes in as soon as the
 session takes it -- mid-turn when steerable, else once the turn is over, one reply per turn, in order. The list lives
 in the browser tab (`convQueue` in `app.js`), so it needs the run view open; a session that ends drops its list.
 Agents without hooks (OpenCode / Pi) are never steerable and wait for the turn's end. "Turn over" is the server's

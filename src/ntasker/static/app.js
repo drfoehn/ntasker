@@ -506,11 +506,16 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         convTurns: [],
         convOpen: {},
         convReply: '',
-        // Images pasted / dropped into the reply box, shown as thumbnails until
-        // the reply is sent ({file, url} -- url is an object URL for the <img>).
-        convImages: [],
+        // Files pasted / dropped into the reply box, shown until the reply is
+        // sent ({file, url} -- url is an object URL for an image's thumbnail,
+        // null for any other file).
+        convFiles: [],
+        // Entries a plugin attached for the next reply (task context picker:
+        // {id, label, icon}); on send, the plugin's convRefsBrief(taskId, refs) text
+        // goes along, removeConvRef(i) lets it undo the attach.
+        convRefs: [],
         // Replies sent while the agent works, per task ({taskId: [{key, text,
-        // images, fresh, sent}]}), shown above the reply box. One goes in each
+        // files, fresh, sent}]}), shown above the reply box. One goes in each
         // time the turn is over; "Send now" hands one over at once (sent=true
         // until the transcript shows it arrived).
         convQueue: {},
@@ -4277,7 +4282,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             try { s.term.dispose(); } catch (_e) { /* already disposed */ }
             _claudeTerms.delete(id);
             // Nowhere left to send its queued replies.
-            (this.convQueue[id] || []).forEach(e => this._revokeImages(e.images));
+            (this.convQueue[id] || []).forEach(e => this._revokeFiles(e.files));
             delete this.convQueue[id];
         },
 
@@ -4773,31 +4778,37 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // mid-turn, Claude Code would hand it to the agent at its next step,
         // and a dialog would take it as its answer.
         async sendConvReply(fresh = false) {
-            const text = this.convReply.trim();
-            const images = this.convImages;
-            if (!text && !images.length) return;
             const id = this.claudeView;
+            const files = this.convFiles;
+            const refs = this.convRefs;
+            if (!this.convReply.trim() && !files.length && !refs.length) return;
+            const brief = refs.length && typeof this.convRefsBrief === 'function'
+                ? await this.convRefsBrief(id, refs) : '';
+            if (brief === null || this.claudeView !== id) return;   // brief failed (toasted) / tab switched
+            const text = [this.convReply.trim(), brief].filter(Boolean).join('\n\n');
             const queue = this.convQueue[id] || [];
             if (queue.some(e => !e.sent) || !this._takesReply(id, fresh)) {
-                this.convQueue[id] = [...queue, { key: ++_convQueueSeq, text, images, fresh, sent: false }];
+                this.convQueue[id] = [...queue, { key: ++_convQueueSeq, text, files, fresh, sent: false }];
                 this.convReply = '';
-                this.convImages = [];   // the entry owns the object URLs now
+                this.convFiles = [];   // the entry owns the object URLs now
+                this.convRefs = [];
                 this._flushConvQueues();
                 return;
             }
-            if (await this._sendReply(id, { text, images, fresh })) {
+            if (await this._sendReply(id, { text, files, fresh })) {
                 this.convReply = '';
-                this.clearConvImages();
+                this.convRefs = [];
+                this.clearConvFiles();
             }
         },
 
-        // Type one reply into a task's session. Images go first: each is
+        // Type one reply into a task's session. Files go first: each is
         // shipped like a file dropped onto the terminal (the server saves it
         // and types its path into the input line), then the text follows and
         // Enter submits both together. `fresh`: the Send button's "fresh
         // context" option -- a `/clear` goes in first, the reply follows into
         // the new context once it has settled. False when the session is gone.
-        async _sendReply(id, { text, images, fresh }) {
+        async _sendReply(id, { text, files, fresh }) {
             const s = _claudeTerms.get(id);
             if (!s || s.ws.readyState !== WebSocket.OPEN) return false;
             if (fresh) {
@@ -4805,11 +4816,11 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                 await new Promise(resolve => setTimeout(resolve, CLEAR_SETTLE_MS));
                 if (s.ws.readyState !== WebSocket.OPEN) return false;
             }
-            if (images.length) {
-                const payloads = await Promise.all(images.map(img => _fileToBase64(img.file)));
+            if (files.length) {
+                const payloads = await Promise.all(files.map(f => _fileToBase64(f.file)));
                 if (s.ws.readyState !== WebSocket.OPEN) return false;
-                images.forEach((img, i) => {
-                    s.ws.send(JSON.stringify({ type: 'file', name: img.file.name || 'image.png', data: payloads[i] }));
+                files.forEach((f, i) => {
+                    s.ws.send(JSON.stringify({ type: 'file', name: f.file.name || 'image.png', data: payloads[i] }));
                 });
             }
             if (!this.sendQuickPrompt(text, id)) return false;
@@ -4851,7 +4862,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
                 }
                 next.sent = true;
                 this._sendReply(id, next).then(ok => {
-                    if (ok) this._revokeImages(next.images);
+                    if (ok) this._revokeFiles(next.files);
                     else next.sent = false;
                 });
             }
@@ -4866,7 +4877,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             const entry = (this.convQueue[id] || []).find(e => e.key === key);
             if (!entry || entry.sent) return;
             entry.sent = true;
-            if (await this._sendReply(id, entry)) this._revokeImages(entry.images);
+            if (await this._sendReply(id, entry)) this._revokeFiles(entry.files);
             else entry.sent = false;
         },
 
@@ -4874,7 +4885,7 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             const id = this.claudeView;
             const queue = this.convQueue[id] || [];
             const entry = queue.find(e => e.key === key);
-            if (entry) this._revokeImages(entry.images);
+            if (entry) this._revokeFiles(entry.files);
             this.convQueue[id] = queue.filter(e => e.key !== key);
         },
 
@@ -4888,48 +4899,46 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             this.convQueue[id] = queue.filter(e => !e.sent || !seen.some(x => x.includes(e.text)));
         },
 
-        _revokeImages(images) {
-            images.forEach(img => URL.revokeObjectURL(img.url));
+        _revokeFiles(files) {
+            files.forEach(f => f.url && URL.revokeObjectURL(f.url));
         },
 
-        // Queue pasted / dropped image files as thumbnails below the reply box.
-        // Non-images are ignored; oversized ones are refused with a toast.
-        addConvImages(files) {
+        // Queue pasted / dropped files below the reply box -- images as
+        // thumbnails, anything else (a PDF ...) as a chip. Oversized ones are
+        // refused with a toast.
+        addConvFiles(files) {
             const MAX = 25 * 1024 * 1024;   // keep in sync with MAX_UPLOAD_BYTES
             for (const file of files) {
-                if (!file.type.startsWith('image/')) continue;
                 if (file.size > MAX) {
                     this.showToast(_i('claude_file_too_large'), 'danger');
                     continue;
                 }
-                this.convImages.push({ file, url: URL.createObjectURL(file) });
+                const url = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+                this.convFiles.push({ file, url });
             }
         },
 
-        removeConvImage(i) {
-            URL.revokeObjectURL(this.convImages[i].url);
-            this.convImages.splice(i, 1);
+        removeConvFile(i) {
+            this._revokeFiles(this.convFiles.splice(i, 1));
         },
 
-        clearConvImages() {
-            this.convImages.forEach(img => URL.revokeObjectURL(img.url));
-            this.convImages = [];
+        clearConvFiles() {
+            this._revokeFiles(this.convFiles);
+            this.convFiles = [];
         },
 
-        // Ctrl+V in the reply box: take the clipboard's images; a text paste
+        // Ctrl+V in the reply box: take the clipboard's files; a text paste
         // is left to the textarea.
         onConvPaste(e) {
-            const files = e.clipboardData
-                ? Array.from(e.clipboardData.files).filter(f => f.type.startsWith('image/'))
-                : [];
+            const files = e.clipboardData ? Array.from(e.clipboardData.files) : [];
             if (!files.length) return;
             e.preventDefault();
-            this.addConvImages(files);
+            this.addConvFiles(files);
         },
 
         onConvDrop(e) {
             this.convDragOver = false;
-            this.addConvImages(e.dataTransfer ? Array.from(e.dataTransfer.files) : []);
+            this.addConvFiles(e.dataTransfer ? Array.from(e.dataTransfer.files) : []);
         },
 
         // Put the cursor into the conversation's reply box -- when the pane

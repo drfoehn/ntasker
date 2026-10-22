@@ -981,6 +981,16 @@ span.task-activity {
     border: 1px solid var(--tblr-border-color);
     border-radius: var(--tblr-border-radius);
 }
+/* A non-image attachment of the reply (a PDF, a linked task ...). */
+.conv-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 16rem;
+    padding: 0.25rem 1.75rem 0.25rem 0.5rem;
+    border: 1px solid var(--tblr-border-color);
+    border-radius: var(--tblr-border-radius);
+    background: var(--tblr-bg-surface-secondary);
+}
 /* Replies waiting for the agent's turn to end, above the reply box. */
 .conv-queue-item {
     padding: 0.25rem 0.5rem;

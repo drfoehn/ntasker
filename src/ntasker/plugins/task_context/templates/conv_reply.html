@@ -1,0 +1,7 @@
+{# Add context to a running task: opens the picker on it. What gets attached #}
+{# lands in the reply box once the picker closes (see openLiveContext). #}
+<button type="button" class="btn"
+        :title="$i18n('ctx_add_context_hint')" :aria-label="$i18n('ctx_add_context')"
+        @click="openLiveContext()">
+    <i class="ti ti-paperclip"></i>
+</button>

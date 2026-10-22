@@ -15,9 +15,9 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS task_context (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id    INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    -- One of CONTEXT_KINDS: skill | note | member | doc | file | mcp.
-    -- mcp (an MCP server from ~/.claude.json) stores ``mcp://<name>`` -- not
-    -- a file. file is any path on this machine the user pointed at
+    -- One of CONTEXT_KINDS: skill | note | member | doc | file | mcp | task.
+    -- mcp (an MCP server from ~/.claude.json) stores ``mcp://<name>``, task
+    -- (another tracker task) ``task://<id>`` -- neither is a file. file is any path on this machine the user pointed at
     -- explicitly; it is the one kind that is not confined to the workspace
     -- directories.
     kind       TEXT NOT NULL,
@@ -36,12 +36,14 @@ CREATE INDEX IF NOT EXISTS idx_task_context_task ON task_context(task_id);
 #: -- it drives the icon in the UI and the wording in the agent briefing,
 #: never any filesystem behaviour. Rows of any other kind (a fork's
 #: ``brain`` notes, say) are ignored on read.
-CONTEXT_KINDS: tuple[str, ...] = ("skill", "note", "member", "doc", "file", "mcp")
+CONTEXT_KINDS: tuple[str, ...] = ("skill", "note", "member", "doc", "file", "mcp", "task")
 
 #: ``task_context.path`` prefix of an MCP server attachment (``mcp://<name>``).
 MCP_SCHEME = "mcp://"
+#: ``task_context.path`` prefix of a linked task (``task://<id>``).
+TASK_SCHEME = "task://"
 #: Path prefixes that are pointers, not files on disk.
-REMOTE_SCHEMES = (MCP_SCHEME,)
+REMOTE_SCHEMES = (MCP_SCHEME, TASK_SCHEME)
 
 _SELECT = "SELECT task_id, id, kind, path, label, note, created_at FROM task_context"
 _KIND_FILTER = " AND kind IN (" + ", ".join("?" for _ in CONTEXT_KINDS) + ")"

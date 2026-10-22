@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import binascii
 import os
+import time
 import uuid
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from ntasker.i18n import _
 from ntasker.plugins.task_context.db import (
     CONTEXT_KINDS,
     MCP_SCHEME,
+    TASK_SCHEME,
     add_context,
     load_context_for,
     remove_context,
@@ -50,6 +52,12 @@ class ContextAdd(BaseModel):
     note: str = ""
 
 
+class BriefRequest(BaseModel):
+    """Attachment ids to announce to a running session."""
+
+    ids: list[int]
+
+
 class PickRequest(BaseModel):
     """Options for the native file dialog."""
 
@@ -57,19 +65,20 @@ class PickRequest(BaseModel):
 
 
 class UploadIn(BaseModel):
-    """An image pasted into a description: file name + base64 bytes."""
+    """A pasted or dropped file: file name + base64 bytes."""
 
     name: str
     data: str
 
 
-# Cap on one pasted image (decoded). A screenshot is a few MB at most.
+# Cap on one uploaded file (decoded); same as the core's drag-drop cap.
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
 def uploads_dir() -> Path:
-    """Where pasted images live: the user-data dir, so an attachment keeps
-    pointing at a file that exists after a reboot (a temp dir would not)."""
+    """Where uploaded files live: the user-data dir, so an attachment keeps
+    pointing at a file that exists after a reboot (a temp dir would not).
+    Swept by :func:`sweep_uploads`."""
     return Path(platformdirs.user_data_dir("nTasker")) / "uploads"
 
 
@@ -113,6 +122,23 @@ def resolve_context_add(payload: ContextAdd) -> tuple[str, str, str, str]:
         return payload.kind, f"{MCP_SCHEME}{name}", payload.label.strip() or name, payload.note.strip()
     if payload.path.strip().startswith(MCP_SCHEME):
         raise HTTPException(status_code=400, detail=_("An mcp:// path needs kind 'mcp'."))
+
+    if payload.kind == "task":
+        # Another tracker task, by id: ``task://12``, ``#12`` or ``12``. It
+        # must exist now; its title becomes the label.
+        raw = payload.path.strip()
+        raw = raw[len(TASK_SCHEME) :] if raw.startswith(TASK_SCHEME) else raw
+        raw = raw.lstrip("#").strip()
+        if not raw.isdigit():
+            raise HTTPException(status_code=400, detail=_("A linked task needs a task id."))
+        with get_conn() as conn:
+            row = conn.execute("SELECT id, title FROM tasks WHERE id = ?", (int(raw),)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=_("Task not found"))
+        label = payload.label.strip() or f"#{row['id']} {row['title']}"
+        return payload.kind, f"{TASK_SCHEME}{row['id']}", label, payload.note.strip()
+    if payload.path.strip().startswith(TASK_SCHEME):
+        raise HTTPException(status_code=400, detail=_("A task:// path needs kind 'task'."))
 
     if not payload.path.strip():
         raise HTTPException(status_code=400, detail=_("No such file or directory."))
@@ -171,10 +197,30 @@ def api_list_context(task_id: int) -> JSONResponse:
 def api_add_context(task_id: int, payload: ContextAdd) -> JSONResponse:
     """Attach an entry to a task (see :func:`resolve_context_add`)."""
     kind, path, label, note = resolve_context_add(payload)
+    if path == f"{TASK_SCHEME}{task_id}":
+        raise HTTPException(status_code=400, detail=_("A task cannot be linked to itself."))
     with get_conn() as conn:
         _require_task(conn, task_id)
         entry = add_context(conn, task_id, kind, path, label, note)
     return JSONResponse(entry, status_code=201)
+
+
+@router.post("/api/tasks/{task_id}/context/brief")
+def api_context_brief(task_id: int, payload: BriefRequest) -> JSONResponse:
+    """Render attachments as a message for the task's running session.
+
+    The spawn briefing only reaches a run that starts after the attach. For
+    a run already going, the conversation pane puts this text into its reply
+    box -- same wording as the briefing, so the agent reads both alike.
+    Unknown ids are skipped; none left gives an empty text.
+    """
+    from ntasker.plugins.task_context import context_briefing  # noqa: PLC0415 -- avoid cycle
+
+    with get_conn() as conn:
+        _require_task(conn, task_id)
+        wanted = set(payload.ids)
+        entries = [c for c in load_context_for(conn, task_id) if c["id"] in wanted]
+    return JSONResponse({"text": "\n".join(context_briefing(entries, live=True)).strip()})
 
 
 @router.delete("/api/tasks/{task_id}/context/{context_id}", status_code=204)
@@ -224,20 +270,75 @@ def api_context_upload(payload: UploadIn) -> JSONResponse:
 
     The frontend then attaches that path as a ``file`` context entry -- the
     same as picking the file by hand, so the agent reads it at the start of
-    the run. The name is reduced to a basename so a crafted value cannot
-    escape the uploads dir.
+    the run.
     """
     try:
         blob = base64.b64decode(payload.data, validate=True)
     except (ValueError, binascii.Error) as exc:
-        raise HTTPException(status_code=400, detail=_("Invalid image data.")) from exc
+        raise HTTPException(status_code=400, detail=_("Invalid file data.")) from exc
     if not blob or len(blob) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail=_("Image is too large (max 25 MB)."))
-    base = os.path.basename(payload.name).lstrip(".") or "image.png"
+        raise HTTPException(status_code=413, detail=_("File is too large (max 25 MB)."))
+    target = save_upload(payload.name, blob)
+    return JSONResponse({"path": str(target), "name": target.name}, status_code=201)
+
+
+def save_upload(name: str, data: bytes) -> Path:
+    """Write an uploaded file into :func:`uploads_dir` under a unique name.
+
+    The name is reduced to a basename so a crafted value cannot escape the
+    uploads dir.
+    """
+    base = os.path.basename(name).lstrip(".") or "image.png"
     target = uploads_dir() / f"{uuid.uuid4().hex[:8]}-{base}"
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(blob)
-    return JSONResponse({"path": str(target), "name": target.name}, status_code=201)
+    target.write_bytes(data)
+    return target
+
+
+def store_reply_upload(task_id: int, name: str, data: bytes) -> str | None:
+    """Upload hook: a file sent along with a reply to a running task.
+
+    Stored in the uploads dir (not the core's temp dir) and attached to the
+    task as a ``file`` entry, so later runs get it in their briefing too.
+    Returns the path the core pastes into the session; ``None`` (core temp
+    dir) when the task row is gone.
+    """
+    with get_conn() as conn:
+        if conn.execute("SELECT 1 FROM tasks WHERE id = ?", (task_id,)).fetchone() is None:
+            return None
+        target = save_upload(name, data)
+        add_context(conn, task_id, "file", str(target), os.path.basename(name) or target.name)
+    return str(target)
+
+
+#: Grace period before an unreferenced upload is swept: a file pasted into the
+#: create form is stored before its task exists.
+UPLOAD_SWEEP_MIN_AGE = 24 * 60 * 60
+
+
+def sweep_uploads(min_age: float = UPLOAD_SWEEP_MIN_AGE) -> int:
+    """Delete uploads no unarchived task points at any more; returns the count.
+
+    Only files inside :func:`uploads_dir` are touched -- a ``file`` entry the
+    user picked elsewhere is never deleted. A task that is archived or
+    deleted releases its uploads; *done* does not, it can be reopened.
+    """
+    root = uploads_dir()
+    if not root.is_dir():
+        return 0
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT c.path FROM task_context c JOIN tasks t ON t.id = c.task_id"
+            " WHERE t.archived = 0 AND c.kind = 'file'"
+        ).fetchall()
+    kept = {r["path"] for r in rows}
+    cutoff = time.time() - min_age
+    removed = 0
+    for f in root.iterdir():
+        if f.is_file() and str(f) not in kept and f.stat().st_mtime < cutoff:
+            f.unlink(missing_ok=True)
+            removed += 1
+    return removed
 
 
 @router.get("/api/context/mcp")
