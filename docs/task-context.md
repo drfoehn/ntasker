@@ -30,11 +30,18 @@ Because a `file` attachment escapes the workspace roots by design, the write end
 - **Pasted images** -- `Ctrl+V` of an image (a screenshot from the clipboard) into either description field stores it
   under the user-data dir (`nTasker/uploads/`, via `POST /api/context/upload`) and attaches that file, exactly as if
   picked by hand. Text pastes are untouched.
-- **Running task** -- the paperclip left of the conversation's reply box opens the picker on the running task. What
-  gets attached there lands in the reply box as a briefing text once the picker closes (`POST
-  /api/tasks/{id}/context/brief`); the user adds a line and sends it. Non-image files (a PDF ...) pasted or dropped
-  onto the reply box are uploaded, attached and referenced the same way; images stay reply thumbnails. Everything
-  attached mid-run also reaches later runs through the spawn briefing.
+- **Running task** -- one way for everything handed over mid-run: the reply box of the conversation pane.
+  - The paperclip left of it opens the picker on the running task. Each entry attached there also becomes a chip of
+    the next reply; on send, its briefing lines (`POST /api/tasks/{id}/context/brief`) go along with the text. A
+    chip's close button detaches the entry again.
+  - Files pasted or dropped onto the reply box (images, PDFs, anything) ship with the reply over the session's
+    WebSocket like a terminal drop. The plugin's upload hook stores each under the user-data dir and attaches it as
+    a `file` entry before its path is pasted into the session.
+  - Everything attached mid-run also reaches later runs through the spawn briefing.
+- **Upload cleanup** -- an hourly sweep (and one on boot) deletes files in the uploads dir that no unarchived task
+  points at any more and that are older than a day (the grace period covers a paste into the create form). Archiving
+  or deleting a task releases its uploads; *done* does not, a task can be reopened. Files outside the uploads dir are
+  never touched.
 - **Task cards** (list and board) -- chips; red when the file has moved away. Clicking a chip opens the entry in the
   desktop's default application (or in the workspace viewer when that plugin is enabled).
 - **Briefing** -- `## Attached context` block in the compact seed and in the `/task` loader output; a `note` on an
@@ -45,8 +52,9 @@ Because a `file` attachment escapes the workspace roots by design, the write end
 
 The *Files* tab opens the OS file dialog on this desktop (`POST /api/fs/pick`; macOS `osascript`, Linux `zenity`,
 otherwise 501 and the buttons stay hidden) or takes pasted paths, one per line, each checked via `GET /api/fs/resolve`.
-The *MCP servers* tab lists `~/.claude.json`, the *Tasks* tab the tracker's unarchived tasks (open first). Team / Skills / Knowledge / Documents tabs appear only with the workspace
-plugin enabled and the directory configured. A row in any list **toggles**: one click attaches the entry (check mark),
+The *MCP servers* tab lists `~/.claude.json`, the *Tasks* tab the tracker's unarchived tasks (open first). Team /
+Skills / Knowledge / Documents tabs appear only with the workspace plugin enabled and the directory
+configured. A row in any list **toggles**: one click attaches the entry (check mark),
 the next click detaches it again.
 
 ## API
@@ -59,7 +67,7 @@ the next click detaches it again.
 | GET | `/api/tasks/{id}/context/{cid}/file` | preview payload of the attached file |
 | POST | `/api/tasks/{id}/context/{cid}/reveal` | open the file in the desktop's default app |
 | POST | `/api/tasks/{id}/context/brief` | `{ids: [...]}` -> `{text}`: briefing for a running session |
-| POST | `/api/context/upload` | store a pasted or dropped file `{name, data(base64)}`; returns `{path, name}` to attach as `file` |
+| POST | `/api/context/upload` | store an image pasted into a description `{name, data(base64)}`; returns `{path, name}` |
 | GET | `/api/context/mcp` | MCP servers for the picker (no secrets) |
 | GET / POST | `/api/fs/pick` | native dialog availability / open it |
 | GET | `/api/fs/resolve?path=` | normalise a typed path, report existence |

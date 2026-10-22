@@ -76,6 +76,8 @@ def register(ctx: PluginContext) -> None:
 | `add_cli(fn)` | `fn(subparsers)` adds subcommands to the top-level parser |
 | `add_template_slot(slot, template)` | Jinja template rendered inside a core page slot (below) |
 | `add_js_strings(fn)` | `fn() -> {key: translated}` merged into `window.__i18n` per request |
+| `add_upload_hook(fn)` | `fn(task_id, name, data) -> path or None`: stores a file sent to a running session |
+| `add_sweep(fn)` | `fn()` housekeeping, run on boot and then hourly |
 | `static_url(filename)` | URL of a file under the plugin's `static/` (`/static/plugins/<name>/<file>`) |
 
 A key registered *with* a `label` is rendered as a text field on the plugin's card on the Plugins tab; one without

@@ -183,4 +183,39 @@ def test_brief_for_running_session(client, task, tmp_path):
 
 def test_conv_reply_slot_rendered(client, task):
     html = client.get("/").text
-    assert "openLiveContext()" in html and "convAttachFiles" in client.get("/static/plugins/task_context/task_context.js").text
+    assert "openLiveContext()" in html
+    assert "convRefsBrief" in client.get("/static/plugins/task_context/task_context.js").text
+
+
+def test_reply_file_is_stored_and_attached(client, task, tmp_path, monkeypatch):
+    from ntasker.plugins.task_context import routes
+
+    monkeypatch.setattr(routes, "uploads_dir", lambda: tmp_path / "uploads")
+    path = plugins.store_upload(task["id"], "../paper.pdf", b"%PDF-1.4")
+    assert path and path.startswith(str(tmp_path / "uploads")) and path.endswith("-paper.pdf")
+    [entry] = client.get(f"/api/tasks/{task['id']}/context").json()
+    assert entry["kind"] == "file" and entry["path"] == path and entry["label"] == "paper.pdf"
+    # later runs get it in their briefing
+    assert path in "\n".join(plugins.run_briefings(task["id"]))
+    # plugin off: the core keeps the file in its temp dir, nothing attached
+    monkeypatch.setenv(plugins.ENV_DISABLED, "task_context")
+    assert plugins.store_upload(task["id"], "x.pdf", b"x") is None
+
+
+def test_sweep_uploads(client, task, tmp_path, monkeypatch):
+    import os
+
+    from ntasker.plugins.task_context import routes
+
+    monkeypatch.setattr(routes, "uploads_dir", lambda: tmp_path / "uploads")
+    kept = routes.store_reply_upload(task["id"], "kept.pdf", b"k")
+    other = client.post("/api/tasks", json={"title": "archived"}).json()
+    released = routes.store_reply_upload(other["id"], "gone.pdf", b"g")
+    orphan = str(routes.save_upload("orphan.png", b"o"))
+    fresh = str(routes.save_upload("fresh.png", b"f"))   # create form, task not saved yet
+    for p in (kept, released, orphan):
+        os.utime(p, (0, 0))
+    assert client.patch(f"/api/tasks/{other['id']}", json={"archived": True}).status_code == 200
+    assert routes.sweep_uploads() == 2
+    assert os.path.exists(kept) and os.path.exists(fresh)
+    assert not os.path.exists(released) and not os.path.exists(orphan)

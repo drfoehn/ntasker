@@ -351,9 +351,9 @@
                         <div class="conv-queue-item d-flex align-items-center gap-2" :class="entry.sent && 'is-sent'">
                             <i class="ti ti-user text-secondary"></i>
                             <span class="text-truncate flex-fill" :title="entry.text" x-text="entry.text"></span>
-                            <span class="badge bg-secondary-lt text-nowrap" x-show="entry.images.length"
-                                  :title="$i18n('conv_queue_images', {n: entry.images.length})">
-                                <i class="ti ti-photo me-1"></i><span x-text="entry.images.length"></span>
+                            <span class="badge bg-secondary-lt text-nowrap" x-show="entry.files.length"
+                                  :title="$i18n('conv_queue_files', {n: entry.files.length})">
+                                <i class="ti ti-paperclip me-1"></i><span x-text="entry.files.length"></span>
                             </span>
                             <span class="badge bg-azure-lt text-nowrap" x-show="entry.fresh" x-text="$i18n('conv_queue_fresh')"></span>
                             <span class="text-secondary small text-nowrap" x-show="entry.sent">
@@ -369,12 +369,23 @@
                     </template>
                 </div>
             </template>
-            <div class="d-flex flex-wrap gap-2 mb-2" x-show="convImages.length">
-                <template x-for="(img, i) in convImages" :key="img.url">
+            {# Attachments of the next reply: files (image thumbnails, other files as chips) and plugin entries. #}
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2" x-show="convFiles.length || convRefs.length">
+                <template x-for="(f, i) in convFiles" :key="i + ':' + f.file.name">
                     <div class="conv-thumb">
-                        <img :src="img.url" :alt="img.file.name">
-                        <button type="button" class="btn-close" :title="$i18n('conv_image_remove')"
-                                :aria-label="$i18n('conv_image_remove')" @click="removeConvImage(i)"></button>
+                        <template x-if="f.url"><img :src="f.url" :alt="f.file.name"></template>
+                        <template x-if="!f.url">
+                            <span class="conv-chip"><i class="ti ti-file me-1"></i><span class="text-truncate" x-text="f.file.name"></span></span>
+                        </template>
+                        <button type="button" class="btn-close" :title="$i18n('conv_attachment_remove')"
+                                :aria-label="$i18n('conv_attachment_remove')" @click="removeConvFile(i)"></button>
+                    </div>
+                </template>
+                <template x-for="(ref, i) in convRefs" :key="'ref:' + ref.id">
+                    <div class="conv-thumb">
+                        <span class="conv-chip"><i class="ti me-1" :class="ref.icon"></i><span class="text-truncate" x-text="ref.label"></span></span>
+                        <button type="button" class="btn-close" :title="$i18n('conv_attachment_remove')"
+                                :aria-label="$i18n('conv_attachment_remove')" @click="removeConvRef(i)"></button>
                     </div>
                 </template>
             </div>
@@ -390,11 +401,11 @@
                           @keydown.enter="if (!$event.shiftKey && !$event.isComposing) { $event.preventDefault(); sendConvReply(); }"></textarea>
                 {# Split button: plain Send, or (caret) a /clear first. Never remembered. #}
                 <div class="btn-group dropup" x-data="{ sendMenu: false }" @click.outside="sendMenu = false">
-                    <button type="submit" class="btn btn-primary" :disabled="!convReply.trim() && !convImages.length">
+                    <button type="submit" class="btn btn-primary" :disabled="!convReply.trim() && !convFiles.length && !convRefs.length">
                         <i class="ti ti-send me-1"></i><span x-text="$i18n('conv_send')"></span>
                     </button>
                     <button type="button" class="btn btn-primary dropdown-toggle dropdown-toggle-split"
-                            :disabled="!convReply.trim() && !convImages.length"
+                            :disabled="!convReply.trim() && !convFiles.length && !convRefs.length"
                             @click="sendMenu = !sendMenu" :aria-expanded="sendMenu ? 'true' : 'false'"
                             :aria-label="$i18n('conv_send_options')"></button>
                     <div class="dropdown-menu dropdown-menu-end" :class="{ show: sendMenu }" x-cloak>

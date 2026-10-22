@@ -141,6 +141,8 @@ class PluginContext:
         default_factory=list
     )
     briefings: list[Callable[[int], list[str]]] = field(default_factory=list)
+    upload_hooks: list[Callable[[int, str, bytes], str | None]] = field(default_factory=list)
+    sweeps: list[Callable[[], None]] = field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -210,6 +212,16 @@ class PluginContext:
     def add_briefing(self, fn: Callable[[int], list[str]]) -> None:
         """Extra Markdown lines for a task's agent briefing (``fn(task_id)``)."""
         self.briefings.append(fn)
+
+    def add_upload_hook(self, fn: Callable[[int, str, bytes], str | None]) -> None:
+        """Store a file handed to a running task's session (``fn(task_id,
+        name, data)``): return the path it was saved under, or ``None`` to
+        leave it to the next hook / the core's temp dir."""
+        self.upload_hooks.append(fn)
+
+    def add_sweep(self, fn: Callable[[], None]) -> None:
+        """Housekeeping run on boot and then hourly (``fn()``)."""
+        self.sweeps.append(fn)
 
     def static_url(self, filename: str) -> str:
         """URL of a file under this plugin's ``static/`` directory."""
@@ -390,6 +402,23 @@ def run_briefings(task_id: int) -> list[str]:
         for fn in ctx.briefings:
             lines += fn(task_id)
     return lines
+
+
+def store_upload(task_id: int, name: str, data: bytes) -> str | None:
+    """Path the first enabled plugin stored an uploaded file under, or ``None``."""
+    for ctx in enabled():
+        for fn in ctx.upload_hooks:
+            path = fn(task_id, name, data)
+            if path:
+                return path
+    return None
+
+
+def run_sweeps() -> None:
+    """Run every enabled plugin's housekeeping sweep."""
+    for ctx in enabled():
+        for fn in ctx.sweeps:
+            fn()
 
 
 def missing_requirements(extra: str) -> list[str]:

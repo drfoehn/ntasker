@@ -13,8 +13,11 @@ need that plugin to be *enabled*), ``file`` is any path on this machine,
 tracker task.
 
 A run already going gets what is attached later through the conversation
-pane: it asks ``POST /api/tasks/{id}/context/brief`` for the same lines
-(:func:`context_briefing` with ``live=True``) and puts them in its reply box.
+pane's reply: picker entries become chips there and, on send, the same
+briefing lines (``POST /api/tasks/{id}/context/brief``, :func:`context_briefing`
+with ``live=True``) go along with the text. Files sent with a reply are
+stored and attached by the upload hook (:func:`routes.store_reply_upload`);
+uploads no unarchived task points at are swept hourly.
 """
 
 from __future__ import annotations
@@ -31,7 +34,13 @@ from ntasker.plugins.task_context.db import (
     load_context_bulk,
     load_context_for,
 )
-from ntasker.plugins.task_context.routes import ContextAdd, resolve_context_add, router
+from ntasker.plugins.task_context.routes import (
+    ContextAdd,
+    resolve_context_add,
+    router,
+    store_reply_upload,
+    sweep_uploads,
+)
 
 SPEC = PluginSpec(
     name="task_context",
@@ -172,13 +181,12 @@ def _js_strings() -> dict[str, str]:
         "ctx_mcp": _("MCP servers"),
         "ctx_tasks": _("Tasks"),
         "ctx_task_done": _("done"),
-        "ctx_file_too_large": _("File is too large (max 25 MB)."),
         "ctx_add_context": _("Add context"),
         "ctx_add_context_hint": _(
             "Attach files, tasks, agents or skills to this task and tell the running agent about them."
         ),
         "ctx_live_hint": _(
-            "What you attach here lands in the reply box when you close this dialog -- send it to brief the agent."
+            "What you attach here is added to your next reply -- send it to brief the running agent."
         ),
         "ctx_search": _("Search..."),
         "ctx_no_match": _("Nothing matches your search."),
@@ -206,6 +214,8 @@ def register(ctx: PluginContext) -> None:
     ctx.add_task_hook(_task_hook)
     ctx.add_create_hook(_create_hook)
     ctx.add_briefing(_briefing)
+    ctx.add_upload_hook(store_reply_upload)
+    ctx.add_sweep(sweep_uploads)
     ctx.add_js_strings(_js_strings)
     ctx.add_template_slot("head", "task_context/templates/head.html")
     ctx.add_template_slot("task_form", "task_context/templates/task_form.html")

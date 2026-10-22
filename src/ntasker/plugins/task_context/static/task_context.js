@@ -49,11 +49,11 @@
         return s;
     }
 
-    // `live`: the target task is running -- attachments made now are also
-    // announced to its session (ids collect in `added`, see closePicker).
+    // `live`: the target task is running -- what gets attached now also
+    // becomes a chip of the next reply (convRefs), announced on send.
     const freshPicker = (target, live) => ({
         open: true, target: target || null, tab: 'files', q: '', note: '', busy: false, path: '', picking: false,
-        live: !!live, added: [],
+        live: !!live,
     });
 
     // Read a File as base64 (the data: URL without its prefix).
@@ -75,7 +75,7 @@
             // Picker state. `target` is the task the picked entry attaches to;
             // null = draft mode, picks collect in form.context until createTask
             // sends them along with the new task.
-            picker: { open: false, target: null, tab: 'files', q: '', note: '', busy: false, path: '', picking: false, live: false, added: [] },
+            picker: { open: false, target: null, tab: 'files', q: '', note: '', busy: false, path: '', picking: false, live: false },
             // Tasks for the picker's Tasks tab (GET /api/tasks, not archived).
             pickerTasks: [],
             // Can the server open a native file dialog on this desktop? null =
@@ -108,15 +108,6 @@
                 this.loadPickerTasks();
             },
 
-            // Close the picker. In live mode, what was attached meanwhile goes
-            // into the conversation's reply box -- the user adds a line of
-            // their own if they like and sends it to the running agent.
-            async closePicker() {
-                const { live, added, target } = this.picker;
-                this.picker.open = false;
-                if (live && target && added.length) await this._briefLive(target.id, added);
-            },
-
             // The paperclip in the conversation pane: open the picker on the
             // running task. Its attachments are fetched first so the picker's
             // checkmarks show what the task already carries.
@@ -133,9 +124,12 @@
                 this.openPicker({ id, context }, true);
             },
 
-            // Ask the server for the briefing text of these attachments and
-            // append it to the reply box.
-            async _briefLive(taskId, ids) {
+            // Briefing text for the reply's chips (see sendConvReply in
+            // app.js): the same lines a fresh run gets, worded for a session
+            // that is already going. null after a toast -- the reply waits.
+            async convRefsBrief(taskId, refs) {
+                const ids = refs.filter(r => r.taskId === taskId).map(r => r.id);
+                if (!ids.length) return '';
                 try {
                     const res = await fetch(`/api/tasks/${taskId}/context/brief`, {
                         method: 'POST',
@@ -144,41 +138,20 @@
                     });
                     if (!res.ok) {
                         this.showToast(await errorDetail(res, t('ctx_attach_failed')), 'danger');
-                        return;
+                        return null;
                     }
-                    const { text } = await res.json();
-                    if (!text || this.claudeView !== taskId) return;
-                    const prev = (this.convReply || '').trimEnd();
-                    this.convReply = prev ? `${prev}\n\n${text}` : text;
-                    this.$nextTick(() => {
-                        if (typeof this.fitConvReply === 'function') this.fitConvReply();
-                        const box = this.$refs.convReplyBox;
-                        if (box) box.focus();
-                    });
+                    return (await res.json()).text;
                 } catch (e) {
                     this.showToast(t('ctx_attach_failed'), 'danger');
+                    return null;
                 }
             },
 
-            // Non-image files pasted or dropped onto the conversation's reply
-            // box (a PDF ...; images stay thumbnails, see _takeConvFiles in
-            // app.js): upload, attach to the running task, and put the
-            // reference into the box.
-            async convAttachFiles(files) {
-                const taskId = this.claudeView;
-                if (taskId === null || taskId === undefined) return;
-                const ids = [];
-                for (const file of files) {
-                    if (file.size > 25 * 1024 * 1024) {   // keep in sync with MAX_UPLOAD_BYTES
-                        this.showToast(`${file.name}: ${t('ctx_file_too_large')}`, 'danger');
-                        continue;
-                    }
-                    const info = await this._uploadFile(file);
-                    if (!info) continue;
-                    const entry = await this._postContext({ id: taskId }, { kind: 'file', path: info.path, label: file.name || info.name }, '');
-                    if (entry) ids.push(entry.id);
-                }
-                if (ids.length) await this._briefLive(taskId, ids);
+            // A reply chip's close button: detach the entry again.
+            async removeConvRef(i) {
+                const ref = this.convRefs[i];
+                if (!ref) return;
+                await this.detachContext({ id: ref.taskId }, { id: ref.id });
             },
 
             // Store a file under the user-data dir (POST /api/context/upload);
@@ -450,7 +423,10 @@
                     // a clone, so refreshAll() would not reach it.
                     task.context = [...(task.context || []).filter(c => c.path !== entry.path), entry];
                     this.picker.note = '';
-                    if (this.picker.live && !this.picker.added.includes(entry.id)) this.picker.added.push(entry.id);
+                    if (this.picker.live) {
+                        const ref = { taskId: task.id, id: entry.id, label: entry.label, icon: this.contextChipIcon(entry) };
+                        this.convRefs = [...this.convRefs.filter(r => r.id !== entry.id), ref];
+                    }
                     await this.refreshAll();
                 } finally {
                     this.picker.busy = false;
@@ -464,7 +440,7 @@
                     return;
                 }
                 task.context = (task.context || []).filter(c => c.id !== entry.id);
-                if (this.picker.added) this.picker.added = this.picker.added.filter(id => id !== entry.id);
+                this.convRefs = this.convRefs.filter(r => r.id !== entry.id);
                 await this.refreshAll();
             },
 

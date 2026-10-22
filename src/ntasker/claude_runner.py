@@ -1179,8 +1179,9 @@ async def serve(websocket: WebSocket, task_id: int) -> None:
       the one exception is ``resume`` truthy, which reopens a finished task's
       stored session id. No live session and no ``resume`` -> ``error``.
     * client -> ``{"type":"input", "data"}`` (keystrokes, written to the PTY)
-    * client -> ``{"type":"file", "name", "data"}`` (base64 file bytes; saved to
-      a temp file whose path is pasted into the PTY -- like a terminal drag-drop)
+    * client -> ``{"type":"file", "name", "data"}`` (base64 file bytes; saved by
+      a plugin (:func:`ntasker.plugins.store_upload`) or to a temp file, whose
+      path is pasted into the PTY -- like a terminal drag-drop)
     * client -> ``{"type":"resize", "rows", "cols"}``
     * client -> ``{"type":"stop"}``
     * server -> ``{"type":"output", "data"}`` (base64 PTY bytes)
@@ -1274,7 +1275,10 @@ async def serve(websocket: WebSocket, task_id: int) -> None:
                     continue
                 if not blob or len(blob) > MAX_UPLOAD_BYTES:
                     continue
-                path = _save_upload(str(msg.get("name", "")), blob)
+                from ntasker import plugins  # noqa: PLC0415 -- lazy: avoid cycle
+
+                name = str(msg.get("name", ""))
+                path = plugins.store_upload(task_id, name, blob) or _save_upload(name, blob)
                 if Path(path).suffix.lower() in _IMAGE_SUFFIXES:
                     pending_images += 1
                     images_attached.clear()

@@ -1,6 +1,6 @@
 {# ---- Context picker: attach an entry to a task ---------------------- #}
 <div class="modal modal-blur" :class="{ 'show d-block': picker.open }" x-cloak
-     @keydown.escape.window="picker.open && closePicker()">
+     @keydown.escape.window="picker.open = false">
     <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
         <div class="modal-content">
             <div class="modal-header">
@@ -11,7 +11,7 @@
                     <span class="text-secondary ms-2" :class="picker.target && 'font-monospace'"
                           x-text="picker.target ? '#' + picker.target.id : $i18n('new_task')"></span>
                 </h5>
-                <button type="button" class="btn-close" @click="closePicker()" :aria-label="$i18n('close')"></button>
+                <button type="button" class="btn-close" @click="picker.open = false" :aria-label="$i18n('close')"></button>
             </div>
             <div class="modal-body">
                 {# Live mode: the task is running; picks are announced to its session. #}
@@ -91,9 +91,9 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-sm btn-primary" @click="closePicker()" x-text="$i18n('close')"></button>
+                <button type="button" class="btn btn-sm btn-primary" @click="picker.open = false" x-text="$i18n('close')"></button>
             </div>
         </div>
     </div>
 </div>
-<div class="modal-backdrop fade show" x-show="picker.open" x-cloak @click="closePicker()"></div>
+<div class="modal-backdrop fade show" x-show="picker.open" x-cloak @click="picker.open = false"></div>
