@@ -140,3 +140,35 @@ def test_scan_docs_reads_project_from_filename(tmp_path):
         "2026-06-08_notes.md": "",
         "loose.md": "",
     }
+
+
+def test_run_file_bound_to_transcript(client, tmp_path, monkeypatch):
+    import json
+
+    from ntasker.db import get_conn
+
+    sid = "11111111-2222-3333-4444-555555555555"
+    report = tmp_path / "docs" / "report.md"
+    report.parent.mkdir()
+    report.write_text("# Report")
+    secret = tmp_path / "secret.txt"
+    secret.write_text("nope")
+    home = tmp_path / "claude"
+    (home / "projects" / "-cwd").mkdir(parents=True)
+    event = {"type": "assistant", "message": {"content": [{"type": "text", "text": f"Wrote [it]({report})"}]}}
+    (home / "projects" / "-cwd" / f"{sid}.jsonl").write_text(json.dumps(event))
+    monkeypatch.setenv("NTASKER_CLAUDE_HOME", str(home))
+    tid = client.post("/api/tasks", json={"title": "t", "agent": "claude"}).json()["id"]
+    url = f"/api/tasks/{tid}/run-file"
+    assert client.get(url, params={"path": str(report)}).status_code == 403   # no session yet
+    with get_conn() as conn:
+        conn.execute("UPDATE tasks SET session_id = ? WHERE id = ?", (sid, tid))
+    r = client.get(url, params={"path": str(report)})
+    assert r.status_code == 200 and "# Report" in r.text
+    assert client.get(url, params={"path": str(secret)}).status_code == 403
+    assert client.get(url, params={"path": ""}).status_code == 403
+    assert client.get("/api/tasks/999999/run-file", params={"path": str(report)}).status_code == 404
+    opened = []
+    monkeypatch.setattr(scan, "open_with_desktop", lambda p: opened.append(p) or {"opened": True})
+    assert client.post(f"{url}/reveal", params={"path": str(report)}).status_code == 200 and opened == [report]
+    assert client.post(f"{url}/reveal", params={"path": str(secret)}).status_code == 403

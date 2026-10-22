@@ -1,7 +1,9 @@
 """HTTP routes of the workspace plugin: the ``/workspace`` page and ``/api/workspace/*``.
 
 Reads and writes are confined to :func:`~ntasker.plugins.workspace.scan.configured_roots`
--- the directories the user explicitly configured. Mutating endpoints are
+-- the directories the user explicitly configured. The one exception is
+read-only: ``/api/tasks/{id}/run-file`` shows a file the task's run touched
+(see :func:`_run_file`). Mutating endpoints are
 covered by :class:`ntasker.middleware.OriginGuardMiddleware` (Origin must
 match the host); every route 404s while the plugin is disabled.
 """
@@ -10,6 +12,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -198,6 +201,52 @@ def api_workspace_reveal(payload: WorkspacePath) -> JSONResponse:
     """Hand a file to the desktop's default application."""
     try:
         return JSONResponse(scan.reveal(payload.path, scan.configured_roots()))
+    except scan.WriteError as exc:
+        raise _write_guard(exc) from exc
+
+
+def _run_file(task_id: int, path: str) -> Path:
+    """Resolve a file a task's run touched; raise 403/404 otherwise.
+
+    The run view opens files outside the workspace roots too -- a report the
+    agent wrote to the documents folder. The authorisation is "this path
+    occurs in the task's session transcript" (the agent read, wrote or named
+    it), so the endpoint cannot be used to read arbitrary files.
+    """
+    from ntasker.agents import get_spec, resolve_agent_key, resolve_home  # noqa: PLC0415
+    from ntasker.db import get_conn  # noqa: PLC0415
+    from ntasker.transcript import find_transcript  # noqa: PLC0415
+
+    with get_conn() as conn:
+        row = conn.execute("SELECT agent, session_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=_("Task not found"))
+    spec = get_spec(resolve_agent_key(row["agent"]))
+    transcript = find_transcript(resolve_home(spec), row["session_id"]) if spec.transcript else None
+    try:
+        target = scan._resolve(path)
+    except scan.WriteError as exc:
+        raise _write_guard(exc) from exc
+    text = transcript.read_text(encoding="utf-8", errors="replace") if transcript else ""
+    if not path.strip() or not any(p in text for p in {path, str(target)}):
+        raise HTTPException(status_code=403, detail=_("This file does not occur in the task's run."))
+    return target
+
+
+@router.get("/api/tasks/{task_id}/run-file")
+def api_run_file(task_id: int, path: str = Query(..., description="File path as the run named it")) -> JSONResponse:
+    """Preview payload of a file the task's run touched (see :func:`_run_file`)."""
+    try:
+        return JSONResponse(scan.describe_file(_run_file(task_id, path)))
+    except scan.PreviewError as exc:
+        raise _preview_guard(exc) from exc
+
+
+@router.post("/api/tasks/{task_id}/run-file/reveal")
+def api_run_file_reveal(task_id: int, path: str = Query(...)) -> JSONResponse:
+    """Hand a file the task's run touched to the desktop's default application."""
+    try:
+        return JSONResponse(scan.open_with_desktop(_run_file(task_id, path)))
     except scan.WriteError as exc:
         raise _write_guard(exc) from exc
 

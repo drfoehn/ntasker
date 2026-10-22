@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: ntasker 1.3.0\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-22 21:30+0200\n"
+"POT-Creation-Date: 2026-10-22 22:32+0200\n"
 "PO-Revision-Date: 2026-05-02 09:19+0200\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -2364,6 +2364,7 @@ msgstr "Queue-Planer"
 #: src/ntasker/app.py:3754 src/ntasker/app.py:3815 src/ntasker/app.py:3926
 #: src/ntasker/plugins/task_context/routes.py:137
 #: src/ntasker/plugins/task_context/routes.py:177
+#: src/ntasker/plugins/workspace/routes.py:223
 msgid "Task not found"
 msgstr "Aufgabe nicht gefunden"
 
@@ -3476,9 +3477,8 @@ msgstr ""
 "fortsetzbar wird"
 
 #: src/ntasker/cli.py:2919
-#, fuzzy
 msgid "Create a task with this title instead."
-msgstr "Aufgabe aus diesem Vorschlag anlegen"
+msgstr "Stattdessen eine Aufgabe mit diesem Titel anlegen."
 
 #: src/ntasker/cli.py:2921
 msgid "Project for --title (default: derived from the directory)."
@@ -4144,7 +4144,6 @@ msgstr ""
 "NTASKER_NO_PROJECT_DIR."
 
 #: src/ntasker/settings.py:694
-#, fuzzy
 msgid ""
 "Project name (not a directory!) of an optional catch-all project for one-"
 "off questions that belong to no project, e.g. 'misc' -- its directory is "
@@ -4787,8 +4786,8 @@ msgid ""
 "What you attach here is added to your next reply -- send it to brief the "
 "running agent."
 msgstr ""
-"Was du hier anhängst, kommt in deine nächste Antwort – schick sie ab, um den "
-"laufenden Agenten zu informieren."
+"Was du hier anhängst, kommt in deine nächste Antwort – schick sie ab, um "
+"den laufenden Agenten zu informieren."
 
 #: src/ntasker/plugins/task_context/__init__.py:191
 #: src/ntasker/plugins/workspace/__init__.py:81
@@ -4885,8 +4884,8 @@ msgstr "Ein task://-Pfad braucht die Art 'task'."
 #: src/ntasker/plugins/task_context/routes.py:144
 #: src/ntasker/plugins/task_context/routes.py:157
 #: src/ntasker/plugins/task_context/routes.py:167
-#: src/ntasker/plugins/task_context/routes.py:387
-#: src/ntasker/plugins/task_context/routes.py:393
+#: src/ntasker/plugins/task_context/routes.py:390
+#: src/ntasker/plugins/task_context/routes.py:396
 #: src/ntasker/plugins/workspace/scan.py:1191
 #: src/ntasker/plugins/workspace/scan.py:1221
 #: src/ntasker/plugins/workspace/scan.py:1317
@@ -4926,16 +4925,16 @@ msgstr "Ungültige Dateidaten."
 msgid "File is too large (max 25 MB)."
 msgstr "Datei ist zu groß (max. 25 MB)."
 
-#: src/ntasker/plugins/task_context/routes.py:366
+#: src/ntasker/plugins/task_context/routes.py:369
 #: src/ntasker/plugins/workspace/scan.py:1377
 msgid "No native file dialog is available here."
 msgstr "Auf diesem System gibt es keinen nativen Datei-Dialog."
 
-#: src/ntasker/plugins/task_context/routes.py:367
+#: src/ntasker/plugins/task_context/routes.py:370
 msgid "Choose a folder to attach"
 msgstr "Ordner zum Anhängen wählen"
 
-#: src/ntasker/plugins/task_context/routes.py:367
+#: src/ntasker/plugins/task_context/routes.py:370
 msgid "Choose files to attach"
 msgstr "Dateien zum Anhängen wählen"
 
@@ -5513,11 +5512,15 @@ msgstr ""
 "neueste zuerst und zeigt Markdown-, Text- und CSV-Dateien direkt an. "
 "Nicht gesetzt blendet die Karte aus."
 
-#: src/ntasker/plugins/workspace/routes.py:218
+#: src/ntasker/plugins/workspace/routes.py:232
+msgid "This file does not occur in the task's run."
+msgstr "Diese Datei kommt im Lauf dieser Aufgabe nicht vor."
+
+#: src/ntasker/plugins/workspace/routes.py:267
 msgid "pandoc is not installed -- the Word export needs it."
 msgstr "pandoc ist nicht installiert -- der Word-Export benötigt es."
 
-#: src/ntasker/plugins/workspace/routes.py:229
+#: src/ntasker/plugins/workspace/routes.py:278
 #, python-brace-format
 msgid "pandoc failed: {error}"
 msgstr "pandoc ist fehlgeschlagen: {error}"
@@ -5801,9 +5804,8 @@ msgid "Add prompt"
 msgstr "Prompt hinzufügen"
 
 #: src/ntasker/templates/settings.html:270
-#, fuzzy
 msgid "Terminal sessions"
-msgstr "Session fortsetzen"
+msgstr "Terminal-Sitzungen"
 
 #: src/ntasker/templates/settings.html:271
 msgid "Carry on with a conversation you started outside nTasker."

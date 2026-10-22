@@ -43,6 +43,11 @@ Every read and write is confined to the configured roots (`allowed_roots` / `wit
 root itself can never be renamed or deleted. Nothing is destroyed: delete moves to the OS trash (macOS Finder) or into
 `<root>/.ntasker-trash/<timestamp>/`. Mutating endpoints are additionally covered by the origin guard.
 
+One read-only exception: the run view opens files a task's run touched outside the roots -- a report the agent
+wrote to the documents folder, a local file link in its answer. `/api/tasks/{id}/run-file` serves such a file only
+when its path occurs in the task's session transcript (the agent read, wrote or named it); in the viewer it stays
+read-only, and *open* goes to the desktop through the same check. Files in the run's diff open the diff instead.
+
 ## API
 
 | Method | Path | Purpose |
@@ -55,6 +60,8 @@ root itself can never be renamed or deleted. Nothing is destroyed: delete moves 
 | POST | `/api/workspace/rename` | `{path, name}` |
 | POST | `/api/workspace/delete` | `{path}` move to trash; reports `method` (`os` / `folder`) and `trashed_to` |
 | POST | `/api/workspace/reveal` | `{path}` open in the default app |
+| GET | `/api/tasks/{id}/run-file?path=` | preview payload of a file the task's run touched (transcript-bound) |
+| POST | `/api/tasks/{id}/run-file/reveal?path=` | open such a file in the default app |
 | POST | `/api/workspace/docx` | `{text}` Markdown -> `.docx` bytes through `pandoc` (501 when it is not installed) |
 
 Vendor assets `marked-js` and `dompurify-js` join the SRI manifest (`ntasker assets fetch` caches them like the rest).

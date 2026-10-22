@@ -4709,7 +4709,8 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // An edited file's link in the step summary: open the Diff on it when
         // the file is part of the run's change set. A file outside the held
         // repos (a generated report, an .xlsx in the documents folder) has no
-        // diff -- it opens in the workspace file viewer instead.
+        // diff -- it opens in the workspace file viewer instead, authorised
+        // by the run's transcript (see wsRunFilePreview).
         async openDiffFile(file) {
             const id = this.claudeView;
             let data = null;
@@ -4720,14 +4721,15 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
             if (this.claudeView !== id) return;
             const match = (x) => file === x.path || file.endsWith(`/${x.dir}/${x.path}`);
             const inDiff = !!(data && data.files.some(match));
-            if (!inDiff && typeof this.wsPreview === 'function') {
-                this.wsPreview(file);
+            if (!inDiff && typeof this.wsRunFilePreview === 'function') {
+                this.wsRunFilePreview(id, file);
                 return;
             }
+            // Show the change set just fetched -- no second request.
             this.runDiffOpen = true;
-            await this.loadDiff(id);
-            const f = this.diff && this.diff.files.find(match);
-            if (f) this.diffSelected = this.diffKey(f);
+            this.diff = data || { git: false, files: [] };
+            const f = this.diff.files.find(match);
+            this.diffSelected = f ? this.diffKey(f) : (this.diff.files.length ? this.diffKey(this.diff.files[0]) : null);
         },
 
         // Clicks in the conversation: a Markdown link to a local file

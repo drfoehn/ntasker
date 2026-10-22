@@ -247,11 +247,11 @@
             },
 
             async wsRevealFile(path) {
-                // A "file" attachment lives outside the workspace roots; its
-                // open goes through the attachment row instead.
+                // A file outside the workspace roots (a "file" attachment, a
+                // file of a run) opens through the endpoint that authorised it.
                 const ext = this.wsViewer.file && this.wsViewer.file.path === path && this.wsViewer.file.external;
                 const res = ext
-                    ? await fetch(`/api/tasks/${ext.taskId}/context/${ext.contextId}/reveal`, { method: 'POST' })
+                    ? await fetch(ext.revealUrl, { method: 'POST' })
                     : await fetch('/api/workspace/reveal', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -295,9 +295,22 @@
                     this.showToast(WS.t('ws_file_preview_after_create'), 'info');
                     return;
                 }
+                const base = `/api/tasks/${taskId}/context/${c.id}`;
+                await this._wsExternalPreview(`${base}/file`, `${base}/reveal`);
+            },
+
+            // A file a task's run touched but that is not in its diff (a
+            // report in the documents folder, a local link in an answer):
+            // authorised by the run's transcript, not by the workspace roots.
+            async wsRunFilePreview(taskId, path) {
+                const q = 'path=' + encodeURIComponent(path);
+                await this._wsExternalPreview(`/api/tasks/${taskId}/run-file?${q}`, `/api/tasks/${taskId}/run-file/reveal?${q}`);
+            },
+
+            async _wsExternalPreview(fileUrl, revealUrl) {
                 Object.assign(this.wsViewer, freshViewer());
                 try {
-                    const res = await fetch(`/api/tasks/${taskId}/context/${c.id}/file`);
+                    const res = await fetch(fileUrl);
                     if (!res.ok) {
                         this.wsViewer.error = await WS.errorDetail(res, WS.t('ws_preview_failed'));
                         return;
@@ -305,8 +318,8 @@
                     const file = await res.json();
                     // `external` keeps the viewer read-only (no rename/delete/
                     // edit -- those endpoints are root-confined) and routes
-                    // "open" through the attachment endpoint.
-                    file.external = { taskId, contextId: c.id };
+                    // "open" through the endpoint that authorised the file.
+                    file.external = { revealUrl };
                     this.wsViewer.file = file;
                     Object.assign(this.wsViewer, WS.renderFile(file));
                 } catch (e) {
