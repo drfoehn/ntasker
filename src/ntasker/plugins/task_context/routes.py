@@ -32,6 +32,7 @@ from ntasker.i18n import _
 from ntasker.plugins.task_context.db import (
     CONTEXT_KINDS,
     MCP_SCHEME,
+    TASK_SCHEME,
     add_context,
     load_context_for,
     remove_context,
@@ -50,6 +51,12 @@ class ContextAdd(BaseModel):
     note: str = ""
 
 
+class BriefRequest(BaseModel):
+    """Attachment ids to announce to a running session."""
+
+    ids: list[int]
+
+
 class PickRequest(BaseModel):
     """Options for the native file dialog."""
 
@@ -57,7 +64,7 @@ class PickRequest(BaseModel):
 
 
 class UploadIn(BaseModel):
-    """An image pasted into a description: file name + base64 bytes."""
+    """A pasted or dropped file: file name + base64 bytes."""
 
     name: str
     data: str
@@ -113,6 +120,23 @@ def resolve_context_add(payload: ContextAdd) -> tuple[str, str, str, str]:
         return payload.kind, f"{MCP_SCHEME}{name}", payload.label.strip() or name, payload.note.strip()
     if payload.path.strip().startswith(MCP_SCHEME):
         raise HTTPException(status_code=400, detail=_("An mcp:// path needs kind 'mcp'."))
+
+    if payload.kind == "task":
+        # Another tracker task, by id: ``task://12``, ``#12`` or ``12``. It
+        # must exist now; its title becomes the label.
+        raw = payload.path.strip()
+        raw = raw[len(TASK_SCHEME) :] if raw.startswith(TASK_SCHEME) else raw
+        raw = raw.lstrip("#").strip()
+        if not raw.isdigit():
+            raise HTTPException(status_code=400, detail=_("A linked task needs a task id."))
+        with get_conn() as conn:
+            row = conn.execute("SELECT id, title FROM tasks WHERE id = ?", (int(raw),)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=_("Task not found"))
+        label = payload.label.strip() or f"#{row['id']} {row['title']}"
+        return payload.kind, f"{TASK_SCHEME}{row['id']}", label, payload.note.strip()
+    if payload.path.strip().startswith(TASK_SCHEME):
+        raise HTTPException(status_code=400, detail=_("A task:// path needs kind 'task'."))
 
     if not payload.path.strip():
         raise HTTPException(status_code=400, detail=_("No such file or directory."))
@@ -171,10 +195,30 @@ def api_list_context(task_id: int) -> JSONResponse:
 def api_add_context(task_id: int, payload: ContextAdd) -> JSONResponse:
     """Attach an entry to a task (see :func:`resolve_context_add`)."""
     kind, path, label, note = resolve_context_add(payload)
+    if path == f"{TASK_SCHEME}{task_id}":
+        raise HTTPException(status_code=400, detail=_("A task cannot be linked to itself."))
     with get_conn() as conn:
         _require_task(conn, task_id)
         entry = add_context(conn, task_id, kind, path, label, note)
     return JSONResponse(entry, status_code=201)
+
+
+@router.post("/api/tasks/{task_id}/context/brief")
+def api_context_brief(task_id: int, payload: BriefRequest) -> JSONResponse:
+    """Render attachments as a message for the task's running session.
+
+    The spawn briefing only reaches a run that starts after the attach. For
+    a run already going, the conversation pane puts this text into its reply
+    box -- same wording as the briefing, so the agent reads both alike.
+    Unknown ids are skipped; none left gives an empty text.
+    """
+    from ntasker.plugins.task_context import context_briefing  # noqa: PLC0415 -- avoid cycle
+
+    with get_conn() as conn:
+        _require_task(conn, task_id)
+        wanted = set(payload.ids)
+        entries = [c for c in load_context_for(conn, task_id) if c["id"] in wanted]
+    return JSONResponse({"text": "\n".join(context_briefing(entries, live=True)).strip()})
 
 
 @router.delete("/api/tasks/{task_id}/context/{context_id}", status_code=204)
@@ -220,7 +264,10 @@ def api_context_reveal(task_id: int, context_id: int) -> JSONResponse:
 
 @router.post("/api/context/upload", status_code=201)
 def api_context_upload(payload: UploadIn) -> JSONResponse:
-    """Store an image pasted into a task description; returns its path.
+    """Store a file pasted or dropped in the UI; returns its path.
+
+    Sources: an image pasted into a task description, a file (PDF, image
+    ...) pasted or dropped onto the conversation's reply box.
 
     The frontend then attaches that path as a ``file`` context entry -- the
     same as picking the file by hand, so the agent reads it at the start of
@@ -230,9 +277,9 @@ def api_context_upload(payload: UploadIn) -> JSONResponse:
     try:
         blob = base64.b64decode(payload.data, validate=True)
     except (ValueError, binascii.Error) as exc:
-        raise HTTPException(status_code=400, detail=_("Invalid image data.")) from exc
+        raise HTTPException(status_code=400, detail=_("Invalid file data.")) from exc
     if not blob or len(blob) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail=_("Image is too large (max 25 MB)."))
+        raise HTTPException(status_code=413, detail=_("File is too large (max 25 MB)."))
     base = os.path.basename(payload.name).lstrip(".") or "image.png"
     target = uploads_dir() / f"{uuid.uuid4().hex[:8]}-{base}"
     target.parent.mkdir(parents=True, exist_ok=True)

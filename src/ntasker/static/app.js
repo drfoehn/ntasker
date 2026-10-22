@@ -4919,17 +4919,23 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
         // Ctrl+V in the reply box: take the clipboard's images; a text paste
         // is left to the textarea.
         onConvPaste(e) {
-            const files = e.clipboardData
-                ? Array.from(e.clipboardData.files).filter(f => f.type.startsWith('image/'))
-                : [];
+            const files = e.clipboardData ? Array.from(e.clipboardData.files) : [];
             if (!files.length) return;
             e.preventDefault();
-            this.addConvImages(files);
+            this._takeConvFiles(files);
         },
 
         onConvDrop(e) {
             this.convDragOver = false;
-            this.addConvImages(e.dataTransfer ? Array.from(e.dataTransfer.files) : []);
+            this._takeConvFiles(e.dataTransfer ? Array.from(e.dataTransfer.files) : []);
+        },
+
+        // Images become thumbnails below the reply box; other files (a PDF
+        // ...) go to a plugin that can attach them (task context), if any.
+        _takeConvFiles(files) {
+            this.addConvImages(files.filter(f => f.type.startsWith('image/')));
+            const others = files.filter(f => !f.type.startsWith('image/'));
+            if (others.length && typeof this.convAttachFiles === 'function') this.convAttachFiles(others);
         },
 
         // Put the cursor into the conversation's reply box -- when the pane

@@ -21,6 +21,7 @@
         file: 'ti-file',
         folder: 'ti-folder',
         mcp: 'ti-plug-connected',
+        task: 'ti-checkbox',
     };
 
     // Pull the server's `detail` out of a failed response; falls back to the
@@ -48,9 +49,22 @@
         return s;
     }
 
-    const freshPicker = target => ({
+    // `live`: the target task is running -- attachments made now are also
+    // announced to its session (ids collect in `added`, see closePicker).
+    const freshPicker = (target, live) => ({
         open: true, target: target || null, tab: 'files', q: '', note: '', busy: false, path: '', picking: false,
+        live: !!live, added: [],
     });
+
+    // Read a File as base64 (the data: URL without its prefix).
+    function fileBase64(file) {
+        return new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result).split(',')[1] || '');
+            r.onerror = reject;
+            r.readAsDataURL(file);
+        });
+    }
 
     window.ntaskerPlugins.push(function (base) {
         // Entries to attach on create: [{kind, path, label, note}] -- sent
@@ -61,7 +75,9 @@
             // Picker state. `target` is the task the picked entry attaches to;
             // null = draft mode, picks collect in form.context until createTask
             // sends them along with the new task.
-            picker: { open: false, target: null, tab: 'files', q: '', note: '', busy: false, path: '', picking: false },
+            picker: { open: false, target: null, tab: 'files', q: '', note: '', busy: false, path: '', picking: false, live: false, added: [] },
+            // Tasks for the picker's Tasks tab (GET /api/tasks, not archived).
+            pickerTasks: [],
             // Can the server open a native file dialog on this desktop? null =
             // not asked yet; the buttons stay hidden until it says yes.
             pickerNative: null,
@@ -84,11 +100,120 @@
             },
 
             // ---- picker ----
-            openPicker(task) {
-                this.picker = freshPicker(task);
+            openPicker(task, live) {
+                this.picker = freshPicker(task, live);
                 if (typeof this.loadWorkspace === 'function') this.loadWorkspace();
                 this.loadPickerNative();
                 this.loadMcpServers();
+                this.loadPickerTasks();
+            },
+
+            // Close the picker. In live mode, what was attached meanwhile goes
+            // into the conversation's reply box -- the user adds a line of
+            // their own if they like and sends it to the running agent.
+            async closePicker() {
+                const { live, added, target } = this.picker;
+                this.picker.open = false;
+                if (live && target && added.length) await this._briefLive(target.id, added);
+            },
+
+            // The paperclip in the conversation pane: open the picker on the
+            // running task. Its attachments are fetched first so the picker's
+            // checkmarks show what the task already carries.
+            async openLiveContext() {
+                const id = this.claudeView;
+                if (id === null || id === undefined) return;
+                let context = [];
+                try {
+                    const res = await fetch(`/api/tasks/${id}/context`);
+                    if (res.ok) context = await res.json();
+                } catch (e) {
+                    // Open with an empty list -- attaching still works.
+                }
+                this.openPicker({ id, context }, true);
+            },
+
+            // Ask the server for the briefing text of these attachments and
+            // append it to the reply box.
+            async _briefLive(taskId, ids) {
+                try {
+                    const res = await fetch(`/api/tasks/${taskId}/context/brief`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids }),
+                    });
+                    if (!res.ok) {
+                        this.showToast(await errorDetail(res, t('ctx_attach_failed')), 'danger');
+                        return;
+                    }
+                    const { text } = await res.json();
+                    if (!text || this.claudeView !== taskId) return;
+                    const prev = (this.convReply || '').trimEnd();
+                    this.convReply = prev ? `${prev}\n\n${text}` : text;
+                    this.$nextTick(() => {
+                        if (typeof this.fitConvReply === 'function') this.fitConvReply();
+                        const box = this.$refs.convReplyBox;
+                        if (box) box.focus();
+                    });
+                } catch (e) {
+                    this.showToast(t('ctx_attach_failed'), 'danger');
+                }
+            },
+
+            // Non-image files pasted or dropped onto the conversation's reply
+            // box (a PDF ...; images stay thumbnails, see _takeConvFiles in
+            // app.js): upload, attach to the running task, and put the
+            // reference into the box.
+            async convAttachFiles(files) {
+                const taskId = this.claudeView;
+                if (taskId === null || taskId === undefined) return;
+                const ids = [];
+                for (const file of files) {
+                    if (file.size > 25 * 1024 * 1024) {   // keep in sync with MAX_UPLOAD_BYTES
+                        this.showToast(`${file.name}: ${t('ctx_file_too_large')}`, 'danger');
+                        continue;
+                    }
+                    const info = await this._uploadFile(file);
+                    if (!info) continue;
+                    const entry = await this._postContext({ id: taskId }, { kind: 'file', path: info.path, label: file.name || info.name }, '');
+                    if (entry) ids.push(entry.id);
+                }
+                if (ids.length) await this._briefLive(taskId, ids);
+            },
+
+            // Store a file under the user-data dir (POST /api/context/upload);
+            // returns {path, name}, or null after a toast.
+            async _uploadFile(file, name) {
+                try {
+                    const data = await fileBase64(file);
+                    const res = await fetch('/api/context/upload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: name || file.name || 'file', data }),
+                    });
+                    if (!res.ok) {
+                        this.showToast(await errorDetail(res, t('ctx_attach_failed')), 'danger');
+                        return null;
+                    }
+                    return await res.json();
+                } catch (e) {
+                    this.showToast(t('ctx_attach_failed'), 'danger');
+                    return null;
+                }
+            },
+
+            async loadPickerTasks() {
+                try {
+                    const res = await fetch('/api/tasks?archived=false');
+                    if (!res.ok) return;
+                    const tasks = await res.json();
+                    // Open tasks first, newest on top.
+                    this.pickerTasks = tasks
+                        .map(x => ({ id: x.id, title: x.title, project: x.project || '', status: x.status }))
+                        .sort((a, b) => (a.status === 'done') - (b.status === 'done') || b.id - a.id);
+                } catch (e) {
+                    // Leave the list as it was.
+                }
             },
 
             // "Files" is always there -- it needs no workspace directory, just
@@ -104,6 +229,7 @@
                 if (has('wiki')) tabs.push({ id: 'wiki', label: 'ws_knowledge', icon: 'ti-book' });
                 if (has('docs')) tabs.push({ id: 'docs', label: 'ws_documents', icon: 'ti-files' });
                 if (this.mcpServers.length) tabs.push({ id: 'mcp', label: 'ctx_mcp', icon: 'ti-plug-connected' });
+                tabs.push({ id: 'tasks', label: 'ctx_tasks', icon: 'ti-checkbox' });
                 return tabs;
             },
 
@@ -188,6 +314,19 @@
             get pickerItems() {
                 const q = this.picker.q;
                 if (this.picker.tab === 'files') return [];
+                if (this.picker.tab === 'tasks') {
+                    const self = this.picker.target ? this.picker.target.id : null;
+                    const rows = this.pickerTasks.filter(x => x.id !== self);
+                    const qs = (q || '').trim().replace(/^#/, '');
+                    const hits = /^\d+$/.test(qs) ? rows.filter(x => String(x.id).startsWith(qs))
+                        : filterItems(rows, q, ['title', 'project']);
+                    return hits.map(x => ({
+                        kind: 'task',
+                        label: `#${x.id} ${x.title}`,
+                        sub: [x.project, x.status === 'done' ? t('ctx_task_done') : ''].filter(Boolean).join(' -- '),
+                        path: 'task://' + x.id,
+                    }));
+                }
                 if (this.picker.tab === 'mcp') {
                     return filterItems(this.mcpServers, q, ['name', 'transport']).map(s => ({
                         kind: 'mcp',
@@ -263,22 +402,8 @@
                     const ext = (it.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
                     const name = file.name && file.name !== 'image.png' ? file.name
                         : 'pasted-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.' + ext;
-                    const data = await new Promise((resolve, reject) => {
-                        const r = new FileReader();
-                        r.onload = () => resolve(String(r.result).split(',')[1] || '');
-                        r.onerror = reject;
-                        r.readAsDataURL(file);
-                    });
-                    const res = await fetch('/api/context/upload', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name, data }),
-                    });
-                    if (!res.ok) {
-                        this.showToast(await errorDetail(res, t('ctx_attach_failed')), 'danger');
-                        continue;
-                    }
-                    const info = await res.json();
+                    const info = await this._uploadFile(file, name);
+                    if (!info) continue;
                     const item = { kind: 'file', path: info.path, label: info.name, is_dir: false };
                     if (!target) {
                         this.form.context = [...this.form.context.filter(c => c.path !== item.path), { ...item, note: '' }];
@@ -325,6 +450,7 @@
                     // a clone, so refreshAll() would not reach it.
                     task.context = [...(task.context || []).filter(c => c.path !== entry.path), entry];
                     this.picker.note = '';
+                    if (this.picker.live && !this.picker.added.includes(entry.id)) this.picker.added.push(entry.id);
                     await this.refreshAll();
                 } finally {
                     this.picker.busy = false;
@@ -338,6 +464,7 @@
                     return;
                 }
                 task.context = (task.context || []).filter(c => c.id !== entry.id);
+                if (this.picker.added) this.picker.added = this.picker.added.filter(id => id !== entry.id);
                 await this.refreshAll();
             },
 

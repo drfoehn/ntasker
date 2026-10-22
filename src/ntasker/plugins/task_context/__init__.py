@@ -9,7 +9,12 @@ Kinds (:data:`~ntasker.plugins.task_context.db.CONTEXT_KINDS`): ``skill``,
 ``note``, ``member`` and ``doc`` point into the workspace roots configured
 for the workspace plugin (whose scanners this plugin imports; it does not
 need that plugin to be *enabled*), ``file`` is any path on this machine,
-``mcp`` names an MCP server from ``~/.claude.json``.
+``mcp`` names an MCP server from ``~/.claude.json``, ``task`` links another
+tracker task.
+
+A run already going gets what is attached later through the conversation
+pane: it asks ``POST /api/tasks/{id}/context/brief`` for the same lines
+(:func:`context_briefing` with ``live=True``) and puts them in its reply box.
 """
 
 from __future__ import annotations
@@ -39,7 +44,7 @@ SPEC = PluginSpec(
 )
 
 
-def context_briefing(context: list[dict]) -> list[str]:
+def context_briefing(context: list[dict], *, live: bool = False) -> list[str]:
     """Render attachments as briefing lines (Markdown). Empty list if none.
 
     The agent gets paths, not contents: a persona file or a knowledge-base
@@ -51,6 +56,9 @@ def context_briefing(context: list[dict]) -> list[str]:
     Attachments whose file has since moved are marked instead of dropped:
     an agent that knows a reference is dangling can say so, while a silently
     shortened list just looks like the user never attached anything.
+
+    ``live`` words the header for a session that is already running: the
+    entries arrive mid-run, as a message, instead of in the spawn briefing.
     """
     if not context:
         return []
@@ -61,16 +69,24 @@ def context_briefing(context: list[dict]) -> list[str]:
         "doc": "Document",
         "file": "File",
         "mcp": "MCP server",
+        "task": "Linked task",
     }
-    lines = [
-        "",
-        "## Attached context",
-        "",
-        "The user attached these workspace files to the task. Read the ones "
-        "relevant to what you are doing before you start -- they carry the "
-        "conventions, background and prior art this task depends on.",
-        "",
-    ]
+    if live:
+        lines = [
+            "Additional context for this task -- I just attached it. Read what is "
+            "relevant to the work in progress before you go on:",
+            "",
+        ]
+    else:
+        lines = [
+            "",
+            "## Attached context",
+            "",
+            "The user attached these workspace files to the task. Read the ones "
+            "relevant to what you are doing before you start -- they carry the "
+            "conventions, background and prior art this task depends on.",
+            "",
+        ]
     for entry in context:
         kind = labels.get(entry.get("kind", ""), "File")
         path = entry.get("path", "")
@@ -93,6 +109,17 @@ def context_briefing(context: list[dict]) -> list[str]:
                     "  - Read this file with your Read tool before you rely on it "
                     "(PDFs and images included)."
                 )
+        if entry.get("kind") == "skill":
+            lines.append(
+                "  - A skill: load it with your Skill tool by this name if you have it, "
+                "else read its SKILL.md at that path and follow it."
+            )
+        if entry.get("kind") == "task":
+            tid = path.removeprefix("task://")
+            lines.append(
+                f"  - Read it with `ntasker show {tid}` (description, report, dependencies) "
+                "and use what bears on this task. Do not change that task."
+            )
         if entry.get("kind") == "mcp":
             lines.append(
                 "  - Use the tools of this MCP server for the task (ToolSearch by its "
@@ -143,6 +170,16 @@ def _js_strings() -> dict[str, str]:
         "ctx_note_placeholder": _("Why is this attached? (optional)"),
         "ctx_files": _("Files"),
         "ctx_mcp": _("MCP servers"),
+        "ctx_tasks": _("Tasks"),
+        "ctx_task_done": _("done"),
+        "ctx_file_too_large": _("File is too large (max 25 MB)."),
+        "ctx_add_context": _("Add context"),
+        "ctx_add_context_hint": _(
+            "Attach files, tasks, agents or skills to this task and tell the running agent about them."
+        ),
+        "ctx_live_hint": _(
+            "What you attach here lands in the reply box when you close this dialog -- send it to brief the agent."
+        ),
         "ctx_search": _("Search..."),
         "ctx_no_match": _("Nothing matches your search."),
         "ctx_file_hint": _(
@@ -175,5 +212,6 @@ def register(ctx: PluginContext) -> None:
     ctx.add_template_slot("task_edit", "task_context/templates/task_edit.html")
     ctx.add_template_slot("task_card", "task_context/templates/task_card.html")
     ctx.add_template_slot("board_card", "task_context/templates/task_card.html")
+    ctx.add_template_slot("conv_reply", "task_context/templates/conv_reply.html")
     ctx.add_template_slot("modals", "task_context/templates/modals.html")
     ctx.add_template_slot("scripts", "task_context/templates/scripts.html")

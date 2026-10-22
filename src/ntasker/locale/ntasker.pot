@@ -6,9 +6,9 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: ntasker 3.17.0\n"
+"Project-Id-Version: ntasker 3.19.0\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-19 08:49+0200\n"
+"POT-Creation-Date: 2026-10-22 12:14+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -2063,7 +2063,7 @@ msgstr ""
 msgid "Agent"
 msgstr ""
 
-#: src/ntasker/app.py:1090 src/ntasker/service.py:495
+#: src/ntasker/app.py:1090 src/ntasker/service.py:533
 msgid "not installed"
 msgstr ""
 
@@ -2250,7 +2250,8 @@ msgstr ""
 #: src/ntasker/app.py:2784 src/ntasker/app.py:2824 src/ntasker/app.py:3338
 #: src/ntasker/app.py:3386 src/ntasker/app.py:3523 src/ntasker/app.py:3748
 #: src/ntasker/app.py:3752 src/ntasker/app.py:3813 src/ntasker/app.py:3924
-#: src/ntasker/plugins/task_context/routes.py:151
+#: src/ntasker/plugins/task_context/routes.py:135
+#: src/ntasker/plugins/task_context/routes.py:175
 msgid "Task not found"
 msgstr ""
 
@@ -2463,7 +2464,7 @@ msgstr ""
 msgid "Completed"
 msgstr ""
 
-#: src/ntasker/cli.py:143 src/ntasker/plugins/task_context/__init__.py:135
+#: src/ntasker/cli.py:143 src/ntasker/plugins/task_context/__init__.py:162
 msgid "Attached context"
 msgstr ""
 
@@ -3652,64 +3653,64 @@ msgstr ""
 msgid "{path} already exists"
 msgstr ""
 
-#: src/ntasker/service.py:345
+#: src/ntasker/service.py:383
 msgid "Unsupported platform: only systemd (Linux) and launchd (macOS)."
 msgstr ""
 
-#: src/ntasker/service.py:352 src/ntasker/service.py:371
+#: src/ntasker/service.py:390 src/ntasker/service.py:409
 #, python-brace-format
 msgid "wrote {path}"
 msgstr ""
 
-#: src/ntasker/service.py:355
+#: src/ntasker/service.py:393
 #, python-brace-format
 msgid "enabled + started {unit}"
 msgstr ""
 
-#: src/ntasker/service.py:358
+#: src/ntasker/service.py:396
 #, python-brace-format
 msgid "enabled auto-update timer {unit}"
 msgstr ""
 
-#: src/ntasker/service.py:362
+#: src/ntasker/service.py:400
 msgid ""
 "note: lingering is OFF -- the service stops at logout. Enable with: "
 "loginctl enable-linger $USER"
 msgstr ""
 
-#: src/ntasker/service.py:374
+#: src/ntasker/service.py:412
 msgid "loaded launchd agents"
 msgstr ""
 
-#: src/ntasker/service.py:382 src/ntasker/service.py:479
+#: src/ntasker/service.py:420 src/ntasker/service.py:517
 msgid "Unsupported platform."
 msgstr ""
 
-#: src/ntasker/service.py:391 src/ntasker/service.py:399
+#: src/ntasker/service.py:429 src/ntasker/service.py:437
 #, python-brace-format
 msgid "removed {path}"
 msgstr ""
 
-#: src/ntasker/service.py:401
+#: src/ntasker/service.py:439
 msgid "nothing to remove -- no nTasker units installed."
 msgstr ""
 
-#: src/ntasker/service.py:480
+#: src/ntasker/service.py:518
 #, python-brace-format
 msgid "manager: {mgr}"
 msgstr ""
 
-#: src/ntasker/service.py:485
+#: src/ntasker/service.py:523
 #, python-brace-format
 msgid "{name}: not installed"
 msgstr ""
 
-#: src/ntasker/service.py:490
+#: src/ntasker/service.py:528
 #, python-brace-format
 msgid "{name}: {active} ({enabled})"
 msgstr ""
 
-#: src/ntasker/service.py:495
+#: src/ntasker/service.py:533
 msgid "installed"
 msgstr ""
 
@@ -4362,151 +4363,188 @@ msgid ""
 " default."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:33
+#: src/ntasker/plugins/task_context/__init__.py:38
 msgid "Task context"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:35
+#: src/ntasker/plugins/task_context/__init__.py:40
 msgid ""
 "Attach files, notes, personas, skills and MCP servers to a task; the "
 "agent gets them in its briefing."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:136
+#: src/ntasker/plugins/task_context/__init__.py:163
 msgid "Attach"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:137
+#: src/ntasker/plugins/task_context/__init__.py:164
 msgid "Attach context"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:138
+#: src/ntasker/plugins/task_context/__init__.py:165
 msgid "Could not attach it."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:139
+#: src/ntasker/plugins/task_context/__init__.py:166
 msgid "Could not detach it."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:140
+#: src/ntasker/plugins/task_context/__init__.py:167
 msgid "Detach"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:141
+#: src/ntasker/plugins/task_context/__init__.py:168
 msgid "Nothing attached yet."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:142
+#: src/ntasker/plugins/task_context/__init__.py:169
 msgid "This file no longer exists at that path."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:143
+#: src/ntasker/plugins/task_context/__init__.py:170
 msgid "Why is this attached? (optional)"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:144
+#: src/ntasker/plugins/task_context/__init__.py:171
 msgid "Files"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:145
+#: src/ntasker/plugins/task_context/__init__.py:172
 #: src/ntasker/plugins/workspace/__init__.py:104
 msgid "MCP servers"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:146
+#: src/ntasker/plugins/task_context/__init__.py:173
+msgid "Tasks"
+msgstr ""
+
+#: src/ntasker/plugins/task_context/__init__.py:174
+msgid "done"
+msgstr ""
+
+#: src/ntasker/plugins/task_context/__init__.py:175
+#: src/ntasker/plugins/task_context/routes.py:282
+msgid "File is too large (max 25 MB)."
+msgstr ""
+
+#: src/ntasker/plugins/task_context/__init__.py:176
+msgid "Add context"
+msgstr ""
+
+#: src/ntasker/plugins/task_context/__init__.py:178
+msgid ""
+"Attach files, tasks, agents or skills to this task and tell the running "
+"agent about them."
+msgstr ""
+
+#: src/ntasker/plugins/task_context/__init__.py:181
+msgid ""
+"What you attach here lands in the reply box when you close this dialog --"
+" send it to brief the agent."
+msgstr ""
+
+#: src/ntasker/plugins/task_context/__init__.py:183
 #: src/ntasker/plugins/workspace/__init__.py:81
 msgid "Search..."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:147
+#: src/ntasker/plugins/task_context/__init__.py:184
 #: src/ntasker/plugins/workspace/__init__.py:82
 msgid "Nothing matches your search."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:149
+#: src/ntasker/plugins/task_context/__init__.py:186
 msgid ""
 "Any file or folder on this machine. The agent reads it at the start of "
 "the run."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:151
+#: src/ntasker/plugins/task_context/__init__.py:188
 msgid "Choose files..."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:152
+#: src/ntasker/plugins/task_context/__init__.py:189
 msgid "Choose a folder..."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:153
+#: src/ntasker/plugins/task_context/__init__.py:190
 msgid "Waiting for the file dialog..."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:154
+#: src/ntasker/plugins/task_context/__init__.py:191
 msgid "...or paste a path:"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:155
+#: src/ntasker/plugins/task_context/__init__.py:192
 msgid "/path/to/file-or-folder (one per line)"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:156
+#: src/ntasker/plugins/task_context/__init__.py:193
 #: src/ntasker/plugins/workspace/__init__.py:137
 msgid "Add"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:157
+#: src/ntasker/plugins/task_context/__init__.py:194
 msgid "No files attached yet."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:158
+#: src/ntasker/plugins/task_context/__init__.py:195
 msgid "Could not open the file dialog."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:159
+#: src/ntasker/plugins/task_context/__init__.py:196
 msgid "Create the task first, then open its attachments."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:160
+#: src/ntasker/plugins/task_context/__init__.py:197
 #: src/ntasker/plugins/workspace/__init__.py:148
 msgid "Could not open it."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:161
+#: src/ntasker/plugins/task_context/__init__.py:198
 #: src/ntasker/plugins/workspace/__init__.py:152
 msgid "runtime missing"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/__init__.py:162
+#: src/ntasker/plugins/task_context/__init__.py:199
 #, python-brace-format
 msgid "Use the tools of the MCP server {name} for this task."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:99
+#: src/ntasker/plugins/task_context/routes.py:106
 #, python-brace-format
 msgid "Unknown context kind: {kind}"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:111
+#: src/ntasker/plugins/task_context/routes.py:118
 #, python-brace-format
 msgid "No MCP server named {name} in ~/.claude.json."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:115
+#: src/ntasker/plugins/task_context/routes.py:122
 msgid "An mcp:// path needs kind 'mcp'."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:118
 #: src/ntasker/plugins/task_context/routes.py:131
-#: src/ntasker/plugins/task_context/routes.py:141
-#: src/ntasker/plugins/task_context/routes.py:289
-#: src/ntasker/plugins/task_context/routes.py:295
+msgid "A linked task needs a task id."
+msgstr ""
+
+#: src/ntasker/plugins/task_context/routes.py:139
+msgid "A task:// path needs kind 'task'."
+msgstr ""
+
+#: src/ntasker/plugins/task_context/routes.py:142
+#: src/ntasker/plugins/task_context/routes.py:155
+#: src/ntasker/plugins/task_context/routes.py:165
+#: src/ntasker/plugins/task_context/routes.py:336
+#: src/ntasker/plugins/task_context/routes.py:342
 #: src/ntasker/plugins/workspace/scan.py:1191
 #: src/ntasker/plugins/workspace/scan.py:1221
 #: src/ntasker/plugins/workspace/scan.py:1317
 msgid "No such file or directory."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:138
+#: src/ntasker/plugins/task_context/routes.py:162
 #: src/ntasker/plugins/workspace/scan.py:831
 #: src/ntasker/plugins/workspace/scan.py:932
 #: src/ntasker/plugins/workspace/scan.py:1052
@@ -4515,34 +4553,34 @@ msgstr ""
 msgid "Path lies outside every configured workspace directory."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:158
-#: src/ntasker/plugins/task_context/routes.py:186
+#: src/ntasker/plugins/task_context/routes.py:182
+#: src/ntasker/plugins/task_context/routes.py:230
 msgid "Attachment not found"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:200
-#: src/ntasker/plugins/task_context/routes.py:214
+#: src/ntasker/plugins/task_context/routes.py:199
+msgid "A task cannot be linked to itself."
+msgstr ""
+
+#: src/ntasker/plugins/task_context/routes.py:244
+#: src/ntasker/plugins/task_context/routes.py:258
 msgid "This attachment is not a file."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:233
-msgid "Invalid image data."
+#: src/ntasker/plugins/task_context/routes.py:280
+msgid "Invalid file data."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:235
-msgid "Image is too large (max 25 MB)."
-msgstr ""
-
-#: src/ntasker/plugins/task_context/routes.py:268
+#: src/ntasker/plugins/task_context/routes.py:315
 #: src/ntasker/plugins/workspace/scan.py:1377
 msgid "No native file dialog is available here."
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:269
+#: src/ntasker/plugins/task_context/routes.py:316
 msgid "Choose a folder to attach"
 msgstr ""
 
-#: src/ntasker/plugins/task_context/routes.py:269
+#: src/ntasker/plugins/task_context/routes.py:316
 msgid "Choose files to attach"
 msgstr ""
 

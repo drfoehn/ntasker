@@ -143,3 +143,44 @@ def test_upload_pasted_image_and_attach(client, task, tmp_path, monkeypatch):
     assert r.status_code == 201 and r.json()["label"] == r.json()["path"].rsplit("/", 1)[-1]
     assert client.post("/api/context/upload", json={"name": "x.png", "data": "not base64!"}).status_code == 400
     assert client.post("/api/context/upload", json={"name": "x.png", "data": ""}).status_code == 413
+
+
+def test_link_task(client, task):
+    other = client.post("/api/tasks", json={"title": "background"}).json()
+    tid = task["id"]
+    for path in (f"task://{other['id']}", f"#{other['id']}", str(other["id"])):
+        r = client.post(f"/api/tasks/{tid}/context", json={"kind": "task", "path": path})
+        assert r.status_code == 201, r.text
+        entry = r.json()
+        assert entry["path"] == f"task://{other['id']}"
+        assert entry["label"] == f"#{other['id']} background"
+        assert entry["exists"] is True and entry["remote"] is True
+    assert len(client.get(f"/api/tasks/{tid}/context").json()) == 1
+    # self-link, unknown id, wrong scheme / kind combinations
+    assert client.post(f"/api/tasks/{tid}/context", json={"kind": "task", "path": str(tid)}).status_code == 400
+    assert client.post(f"/api/tasks/{tid}/context", json={"kind": "task", "path": "999999"}).status_code == 404
+    assert client.post(f"/api/tasks/{tid}/context", json={"kind": "task", "path": "abc"}).status_code == 400
+    assert client.post(f"/api/tasks/{tid}/context", json={"kind": "file", "path": "task://1"}).status_code == 400
+    text = "\n".join(plugins.run_briefings(tid))
+    assert "Linked task: #" in text and f"ntasker show {other['id']}" in text
+
+
+def test_brief_for_running_session(client, task, tmp_path):
+    tid = task["id"]
+    f = tmp_path / "paper.pdf"
+    f.write_bytes(b"%PDF-1.4")
+    a = client.post(f"/api/tasks/{tid}/context", json={"kind": "file", "path": str(f), "note": "methods"}).json()
+    b = client.post(f"/api/tasks/{tid}/context", json={"kind": "file", "path": str(tmp_path)}).json()
+    r = client.post(f"/api/tasks/{tid}/context/brief", json={"ids": [a["id"], 424242]})
+    assert r.status_code == 200
+    text = r.json()["text"]
+    assert text.startswith("Additional context for this task")
+    assert str(f) in text and "methods" in text and "## Attached context" not in text
+    assert str(tmp_path) + "`" not in text   # b was not asked for
+    assert client.post(f"/api/tasks/{tid}/context/brief", json={"ids": []}).json()["text"] == ""
+    assert client.post("/api/tasks/999999/context/brief", json={"ids": [b["id"]]}).status_code == 404
+
+
+def test_conv_reply_slot_rendered(client, task):
+    html = client.get("/").text
+    assert "openLiveContext()" in html and "convAttachFiles" in client.get("/static/plugins/task_context/task_context.js").text
