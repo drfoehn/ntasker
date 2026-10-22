@@ -6,6 +6,9 @@ Format: [Keep a Changelog](https://keepachangelog.com), SemVer.
 
 ## [Unreleased]
 
+## [3.20.1] — 2026-10-22
+Run view: files outside the workspace open in the viewer when the run touched them; diff loads once; German fixes.
+
 ## [3.20.0] — 2026-10-22
 Running task: attach files (images, PDFs ...), tasks, skills and docs from the reply box; uploads swept on archive.
 Run view: files outside the repo and local file links in answers open in the viewer instead of the diff.
