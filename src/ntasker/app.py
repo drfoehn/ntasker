@@ -687,6 +687,7 @@ def build_js_strings() -> dict[str, str]:
         "conv_code_run": _("Run in the terminal"),
         "conv_code_run_sent": _("Command sent to the terminal"),
         "conv_code_run_offline": _("No live session -- the command cannot run."),
+        "conv_code_run_busy": _("The agent is busy -- run the command once its turn is over."),
         "conv_send_options": _("More send options"),
         "conv_send_fresh": _("Send using fresh context"),
         "conv_send_fresh_hint": _("Clear the conversation context first, then send the message into the fresh one"),

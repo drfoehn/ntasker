@@ -296,9 +296,11 @@ function renderConvMarkdown(text) {
     return tpl.innerHTML;
 }
 
-// Code the run button may send: it starts with "!" and has a command after it.
+// Code the run button may send: one line that starts with "!" and has a
+// command after it. Multi-line blocks get no run button -- the "!" mode runs
+// without a permission prompt, so what runs must be what is plainly shown.
 function _isShellCommand(code) {
-    return /^!\s*\S/.test((code || '').trim());
+    return /^!\s*\S[^\n]*$/.test((code || '').trim());
 }
 
 // Unified diff -> HTML for the run view's Diff page: one span per line,
@@ -4901,22 +4903,26 @@ function tracker(serverDefaultView, claudeOpenTerminal = true, defaultAgent = 'c
 
         // Run button on a "!" code block: types it into the live session.
         // The "!" goes first on its own -- it switches Claude Code's input to
-        // shell mode -- then the command and Enter.
+        // shell mode -- then the command and Enter. Only at the end of a turn:
+        // mid-turn or in a dialog the keys would answer something else (an
+        // Enter would confirm a permission prompt).
         runConvCommand(text) {
-            const s = _claudeTerms.get(this.claudeView);
+            const id = this.claudeView;
+            const s = _claudeTerms.get(id);
             const cmd = text.trim().replace(/^!\s*/, '');
             if (!cmd) return;
             if (!s || s.ws.readyState !== WebSocket.OPEN) {
                 this.showToast(_i('conv_code_run_offline'), 'danger');
                 return;
             }
-            const send = (data) => {
-                if (s.ws.readyState === WebSocket.OPEN) s.ws.send(JSON.stringify({ type: 'input', data }));
-            };
-            send('!');
-            setTimeout(() => send(cmd.includes('\n') ? `\x1b[200~${cmd}\x1b[201~` : cmd), 80);
-            setTimeout(() => send('\r'), 160);
-            this.showToast(_i('conv_code_run_sent'), 'info');
+            if (!this.claudeIdle.includes(id)) {
+                this.showToast(_i('conv_code_run_busy'), 'danger');
+                return;
+            }
+            s.ws.send(JSON.stringify({ type: 'input', data: '!' }));
+            setTimeout(() => {
+                if (this.sendQuickPrompt(cmd, id)) this.showToast(_i('conv_code_run_sent'), 'info');
+            }, 80);
         },
 
         // The pane's reply box: typed into the live session like a quick prompt.
